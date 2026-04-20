@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Çevrimdışı — RestoPOS</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: white;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .container { text-align: center; max-width: 400px; }
+    .icon { font-size: 64px; margin-bottom: 24px; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 24px; font-weight: bold; margin-bottom: 12px; }
+    p { color: #94a3b8; line-height: 1.6; margin-bottom: 24px; }
+    button {
+      background: #f97316;
+      color: white;
+      border: none;
+      padding: 12px 32px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #ea580c; }
+    .status { margin-top: 20px; font-size: 12px; color: #475569; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">📡</div>
+    <h1>Çevrimdışı Modundasınız</h1>
+    <p>
+      İnternet bağlantısı kesildi. Bağlantı yeniden sağlandığında
+      verileriniz otomatik olarak senkronize edilecek.
+    </p>
+    <button onclick="retry()">🔄 Yeniden Dene</button>
+    <div class="status" id="status">Bağlantı bekleniyor...</div>
+  </div>
+  <script>
+    function retry() {
+      if (navigator.onLine) {
+        window.history.back();
+      } else {
+        document.getElementById('status').textContent = 'Hâlâ çevrimdışı...';
+      }
+    }
+    window.addEventListener('online', () => {
+      document.getElementById('status').textContent = '✅ Bağlantı sağlandı! Yönlendiriliyor...';
+      setTimeout(() => window.history.back(), 1000);
+    });
+    window.addEventListener('offline', () => {
+      document.getElementById('status').textContent = '❌ Bağlantı kesildi';
+    });
+  </script>
+</body>
+</html>

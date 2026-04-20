@@ -1,0 +1,178 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand: #f97316;
+  --brand-dark: #ea580c;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-card: #1e293b;
+  --bg-elevated: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border: #334155;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── SCROLLBAR ─────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--bg-elevated); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* ─── SELECTION ─────────────────────────────────────────── */
+::selection { background: rgba(249,115,22,0.3); color: white; }
+
+/* ─── GLASS CARD ─────────────────────────────────────────── */
+.glass-card {
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+}
+
+/* ─── GRADIENT BRAND ─────────────────────────────────────── */
+.gradient-brand {
+  background: linear-gradient(135deg, #f97316 0%, #ec4899 100%);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #f97316 0%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── BUTTONS ────────────────────────────────────────────── */
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-white transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  box-shadow: 0 4px 15px rgba(249,115,22,0.3);
+}
+.btn-primary:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(249,115,22,0.45);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold transition-all duration-200 active:scale-95;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: #475569; }
+
+.btn-danger {
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-white transition-all duration-200 active:scale-95;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.btn-success {
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-white transition-all duration-200 active:scale-95;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+}
+
+/* ─── INPUTS ─────────────────────────────────────────────── */
+.input {
+  @apply w-full px-4 py-3 rounded-xl text-sm font-medium outline-none transition-all duration-200;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1.5px solid var(--border);
+}
+.input::placeholder { color: var(--text-muted); }
+.input:focus {
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px rgba(249,115,22,0.15);
+}
+
+/* ─── CARDS ──────────────────────────────────────────────── */
+.card {
+  @apply rounded-2xl p-6;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+
+/* ─── TABLE STATUS COLORS ───────────────────────────────── */
+.table-available { @apply border-green-500 bg-green-500/10; }
+.table-occupied   { @apply border-orange-500 bg-orange-500/10; }
+.table-reserved   { @apply border-blue-500 bg-blue-500/10; }
+.table-cleaning   { @apply border-yellow-500 bg-yellow-500/10; }
+
+/* ─── ORDER STATUS BADGES ────────────────────────────────── */
+.badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
+}
+.badge-pending    { @apply badge bg-yellow-500/20 text-yellow-400; }
+.badge-preparing  { @apply badge bg-blue-500/20 text-blue-400; }
+.badge-ready      { @apply badge bg-green-500/20 text-green-400; }
+.badge-delivered  { @apply badge bg-purple-500/20 text-purple-400; }
+.badge-closed     { @apply badge bg-slate-500/20 text-slate-400; }
+.badge-cancelled  { @apply badge bg-red-500/20 text-red-400; }
+
+/* ─── KDS TICKET ─────────────────────────────────────────── */
+.kds-ticket {
+  @apply rounded-2xl p-4 transition-all duration-300;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+.kds-ticket.new   { border-color: #f97316; box-shadow: 0 0 20px rgba(249,115,22,0.2); }
+.kds-ticket.ready { border-color: #22c55e; box-shadow: 0 0 20px rgba(34,197,94,0.2); }
+
+/* ─── POS PRODUCT CARD ────────────────────────────────────  */
+.product-card {
+  @apply rounded-xl p-3 cursor-pointer transition-all duration-150 active:scale-95 select-none;
+  background: var(--bg-elevated);
+  border: 1.5px solid transparent;
+}
+.product-card:hover { border-color: #f97316; background: rgba(249,115,22,0.07); }
+
+/* ─── SIDEBAR ────────────────────────────────────────────── */
+.sidebar-item {
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 cursor-pointer;
+  color: var(--text-secondary);
+}
+.sidebar-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+.sidebar-item.active {
+  background: rgba(249,115,22,0.15);
+  color: #f97316;
+}
+
+/* ─── ANIMATIONS ─────────────────────────────────────────── */
+@keyframes ripple {
+  0% { transform: scale(0); opacity: 0.6; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes ticker {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.animate-ticker { animation: ticker 1s ease-in-out; }
+
+/* ─── RESPONSIVE POS ─────────────────────────────────────── */
+@media (max-width: 768px) {
+  .pos-layout { flex-direction: column; }
+}
