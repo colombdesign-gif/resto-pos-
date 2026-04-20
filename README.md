@@ -360,4 +360,5 @@ docker logs restopos-nginx
 
 Bu proje ticari kullanım için geliştirilmiştir. Kaynak kodu gizlidir.
 #   r e s t o - p o s -  
+ #   r e s t o - p o s -  
  
