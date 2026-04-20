@@ -359,3 +359,5 @@ docker logs restopos-nginx
 ## 📄 Lisans
 
 Bu proje ticari kullanım için geliştirilmiştir. Kaynak kodu gizlidir.
+#   r e s t o - p o s -  
+ 
