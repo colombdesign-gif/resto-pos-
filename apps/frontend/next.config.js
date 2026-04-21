@@ -11,6 +11,7 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL,
   },
+  staticPageGenerationTimeout: 1000,
 };
 
 module.exports = nextConfig;

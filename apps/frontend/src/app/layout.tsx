@@ -1,22 +1,23 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Toaster } from 'react-hot-toast';
 
 const inter = Inter({ subsets: ['latin'] });
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#f97316',
+};
+
 export const metadata: Metadata = {
   title: 'Hesap Getir — Profesyonel Restoran POS Sistemi',
   description: 'Bulut tabanlı multi-tenant restoran ve kafe yönetim sistemi',
   keywords: 'restoran pos, kafe yönetim, adisyon sistemi, restoran yazılımı',
   manifest: '/manifest.json',
-  themeColor: '#f97316',
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
