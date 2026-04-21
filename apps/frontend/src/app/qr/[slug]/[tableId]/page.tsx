@@ -50,7 +50,7 @@ export default function QRMenuPage() {
 
   const cartTotal = cart.reduce((s, i) => s + i.product.price * i.quantity, 0);
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
-
+  const handleSubmit = async () => {
     const itemsCount = cart.reduce((s, i) => s + i.quantity, 0);
     if (itemsCount === 0) return;
 
