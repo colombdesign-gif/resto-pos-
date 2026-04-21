@@ -110,27 +110,57 @@ export class MenuService {
     return { message: 'Ürün silindi' };
   }
 
-  // ─── PUBLIC MENÜ (QR) ────────────────────────────────────
+  // ─── PUBLIC MENÜ (QR — FIX: Daha fazla detay eklendi) ──────
   async getPublicMenu(slug: string) {
-    // tenant slug'ına göre kategoriler ve ürünleri getir
+    const [tenant] = await this.categoryRepo.query(
+      `SELECT id, name, slug, default_branch_id FROM tenants WHERE slug = $1 AND is_active = true`,
+      [slug]
+    );
+    if (!tenant) throw new NotFoundException('Restoran bulunamadı');
+
     const products = await this.productRepo.query(
       `SELECT p.*, c.name as category_name, c.icon as category_icon
        FROM products p
        LEFT JOIN categories c ON c.id = p.category_id
-       JOIN tenants t ON t.id = p.tenant_id
-       WHERE t.slug = $1 AND p.is_active = true AND p.is_available = true
+       WHERE p.tenant_id = $1 AND p.is_active = true AND p.is_available = true
        ORDER BY c.sort_order, p.sort_order`,
-      [slug],
+      [tenant.id],
     );
 
     const categories = await this.categoryRepo.query(
       `SELECT c.* FROM categories c
-       JOIN tenants t ON t.id = c.tenant_id
-       WHERE t.slug = $1 AND c.is_active = true
+       WHERE c.tenant_id = $1 AND c.is_active = true
        ORDER BY c.sort_order`,
-      [slug],
+      [tenant.id],
     );
 
-    return { categories, products };
+    return { tenant, categories, products };
+  }
+
+  // ─── QR ÜZERİNDEN SİPARİŞ OLUŞTUR (Auth gerekmez) ─────────
+  async createPublicOrder(data: {
+    slug: string;
+    tableId: string;
+    items: any[];
+    customer_note?: string;
+  }) {
+    const [tenant] = await this.categoryRepo.query(
+      `SELECT id, default_branch_id FROM tenants WHERE slug = $1 AND is_active = true`,
+      [data.slug]
+    );
+    if (!tenant) throw new NotFoundException('Restoran bulunamadı');
+
+    // Bu noktada OrdersService.create() çağrılacak. 
+    // Ancak OrdersService dairesel bağımlılık yaratmaması için OrdersModule içinden MenuModule'e,
+    // ya da bir Shared Service üzerinden yönetilmelidir.
+    // Şimdilik OrdersService'i inject etmiyoruz, controller seviyesinde halledeceğiz veya
+    // MenuService içinde ham SQL ile (Phase 1'deki OrdersService mantığını koruyarak) insert edeceğiz.
+    
+    // Basitlik ve güvenlik için controller'da @Public() decorator'u ile OrdersService.create kullanmak daha temiz.
+    return { 
+      tenantId: tenant.id, 
+      branchId: tenant.default_branch_id,
+      ...data 
+    };
   }
 }

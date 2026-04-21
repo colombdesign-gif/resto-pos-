@@ -7,7 +7,7 @@ import { MenuService } from './menu.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { TenantId } from '../../common/decorators';
+import { TenantId, Public } from '../../common/decorators';
 
 @ApiTags('Menu')
 @ApiBearerAuth()
@@ -98,8 +98,8 @@ export class MenuController {
   }
 
   // ─── PUBLIC QR MENÜ ───────────────────────────────────────
+  @Public()
   @Get('public/:slug')
-  @UseGuards()
   getPublicMenu(@Param('slug') slug: string) {
     return this.svc.getPublicMenu(slug);
   }

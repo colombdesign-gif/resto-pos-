@@ -51,11 +51,13 @@ export default function QRMenuPage() {
   const cartTotal = cart.reduce((s, i) => s + i.product.price * i.quantity, 0);
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
 
-  const handleSubmit = async () => {
-    if (!cart.length) return;
+    const itemsCount = cart.reduce((s, i) => s + i.quantity, 0);
+    if (itemsCount === 0) return;
+
     setSubmitting(true);
     try {
       await api.post('/orders', {
+        tenant_id: menu?.tenant?.id,
         branch_id: menu?.tenant?.default_branch_id,
         table_id: tableId,
         type: 'qr',
@@ -66,6 +68,8 @@ export default function QRMenuPage() {
           quantity: i.quantity,
           unit_price: i.product.price,
         })),
+      }, {
+        headers: { 'x-tenant-id': menu?.tenant?.id }
       });
       setOrdered(true);
       setCart([]);

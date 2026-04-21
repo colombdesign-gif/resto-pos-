@@ -56,10 +56,10 @@ self.addEventListener('fetch', (event) => {
   // Chrome ext / farklı origin → atla
   if (!url.protocol.startsWith('http')) return;
 
-  // API istekleri: Network First
-  if (API_PATTERN.test(url.pathname)) {
-    event.respondWith(networkFirst(request));
-    return;
+  // ─── FETCH INTERCEPTION ─────────────────────────────────────
+  // FIX: API ve Socket.io trafiğini SW kontrolünden çıkar (Gerçek zamanlı bağlantı için)
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) {
+    return; // Tarayıcı standart network katmanını kullansın
   }
 
   // Statik dosyalar: Cache First

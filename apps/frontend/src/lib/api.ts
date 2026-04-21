@@ -1,9 +1,21 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+// FIX: Dinamik API URL tespiti (Opera/Chrome "Offline" hatasını çözer)
+const getBaseURL = () => {
+  if (process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes('localhost')) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof window !== 'undefined') {
+    // Tarayıcıdaysa ve env set edilmemişse mevcut domain'i kullan
+    return window.location.origin;
+  }
+  return 'http://localhost:3001';
+};
+
+const API_URL = getBaseURL();
 
 export const api = axios.create({
-  baseURL: `${API_URL}/api`,
+  baseURL: API_URL.endsWith('/api') ? API_URL : `${API_URL}/api`,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',

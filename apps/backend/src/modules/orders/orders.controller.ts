@@ -6,7 +6,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { TenantId, CurrentUser } from '../../common/decorators';
+import { TenantId, CurrentUser, Public } from '../../common/decorators';
 
 @ApiTags('Orders')
 @ApiBearerAuth()
@@ -37,13 +37,19 @@ export class OrdersController {
     return this.svc.findById(id, tid);
   }
 
+  @Public()
   @Post()
   create(
     @TenantId() tid: string,
     @CurrentUser('id') waiterId: string,
     @Body() body: any,
   ) {
-    return this.svc.create(tid, { ...body, waiter_id: body.waiter_id || waiterId });
+    // QR siparişi ise tid'yi body'den veya slug'dan gelen veriyle eledik (middleware/header üzerinden geçmeli)
+    // QR siparişi ise waiterId null olacaktır, OrdersService bunu desteklemeli.
+    return this.svc.create(tid || body.tenant_id, { 
+      ...body, 
+      waiter_id: waiterId || body.waiter_id || null 
+    });
   }
 
   @Post(':id/items')
