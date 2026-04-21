@@ -74,12 +74,11 @@ export class OrdersService {
     await queryRunner.startTransaction();
 
     try {
-      // 1. Sipariş numarası al — FOR UPDATE ile race condition engelle
+      // 1. Sipariş numarası al
       const numResult = await queryRunner.query(
         `SELECT COALESCE(MAX(order_number), 999) + 1 AS next 
          FROM orders 
-         WHERE branch_id = $1 
-         FOR UPDATE`,
+         WHERE branch_id = $1`,
         [data.branch_id],
       );
       const orderNumber = numResult[0].next;
