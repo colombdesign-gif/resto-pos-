@@ -47,7 +47,7 @@ import { TenantMiddleware } from './common/middlewares/tenant.middleware';
         synchronize: false, // Prod'da false, migration kullan
         logging: configService.get('NODE_ENV') === 'development',
         ssl:
-          configService.get('NODE_ENV') === 'production'
+          configService.get<string>('DB_SSL') === 'true'
             ? { rejectUnauthorized: false }
             : false,
         extra: {
