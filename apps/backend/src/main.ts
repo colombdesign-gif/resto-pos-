@@ -47,8 +47,8 @@ async function bootstrap() {
   // Swagger API Docs
   if (process.env.NODE_ENV !== 'production') {
     const config = new DocumentBuilder()
-      .setTitle('RestoPOS API')
-      .setDescription('RestoPOS SaaS - Restoran POS Sistemi API')
+      .setTitle('Hesap Getir API')
+      .setDescription('Hesap Getir SaaS - Restoran POS Sistemi API')
       .setVersion('1.0')
       .addBearerAuth()
       .build();
@@ -58,7 +58,7 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
-  console.log(`🚀 RestoPOS API çalışıyor: http://localhost:${port}/api`);
+  console.log(`🚀 Hesap Getir API çalışıyor: http://localhost:${port}/api`);
   console.log(`📚 Swagger Docs: http://localhost:${port}/api/docs`);
 }
 
