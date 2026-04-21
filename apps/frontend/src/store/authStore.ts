@@ -43,7 +43,7 @@ export const useAuthStore = create<AuthState>()(
       login: async (email, password) => {
         set({ isLoading: true });
         try {
-          const response: any = await api.post('/auth/login', { email, password });
+          const response: any = await api.post('auth/login', { email, password });
           const data = response.data || response;
           const { user, tenant, accessToken, refreshToken } = data;
 
@@ -66,7 +66,7 @@ export const useAuthStore = create<AuthState>()(
       register: async (data) => {
         set({ isLoading: true });
         try {
-          const response: any = await api.post('/auth/register', data);
+          const response: any = await api.post('auth/register', data);
           const res = response.data || response;
           const { user, tenant, accessToken, refreshToken } = res;
 

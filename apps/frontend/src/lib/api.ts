@@ -15,7 +15,7 @@ const getBaseURL = () => {
 const API_URL = getBaseURL();
 
 export const api = axios.create({
-  baseURL: API_URL.endsWith('/api') ? API_URL : `${API_URL}/api`,
+  baseURL: API_URL.endsWith('/api/') ? API_URL : `${API_URL.replace(/\/$/, '')}/api/`,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
