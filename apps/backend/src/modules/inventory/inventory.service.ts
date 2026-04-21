@@ -108,31 +108,79 @@ export class InventoryService {
     return { previous: previousStock, new: newStock, ingredient };
   }
 
-  // ─── REÇETE CRUD ──────────────────────────────────────────
-  async getRecipe(productId: string) {
-    return this.dataSource.query(
-      `SELECT r.*, i.name as ingredient_name, i.unit, i.cost_per_unit
-       FROM recipes r
-       JOIN ingredients i ON i.id = r.ingredient_id
-       WHERE r.product_id = $1`,
-      [productId],
-    );
-  }
+  // ─── STOK DÜŞÜMÜ (REÇETE BAZLI - ATOMIC) ───────────────────
+  async deductStockByRecipe(productId: string, quantity: number, tenantId: string, referenceId: string, trx?: any) {
+    const manager = trx || this.dataSource.manager;
 
-  async saveRecipe(productId: string, items: { ingredient_id: string; quantity: number }[]) {
-    // Mevcut reçeteyi sil
-    await this.recipeRepo.delete({ product_id: productId });
-    // Yeni reçeteyi kaydet
-    for (const item of items) {
-      await this.recipeRepo.save(
-        this.recipeRepo.create({
-          product_id: productId,
-          ingredient_id: item.ingredient_id,
-          quantity: item.quantity,
-        }),
+    // Reçeteyi al
+    const recipes = await manager.query(
+      `SELECT r.ingredient_id, r.quantity, i.name, i.current_stock 
+       FROM recipes r 
+       JOIN ingredients i ON i.id = r.ingredient_id 
+       WHERE r.product_id = $1`,
+      [productId]
+    );
+
+    for (const item of recipes) {
+      const requiredAmount = Number(item.quantity) * quantity;
+      
+      // SQL seviyesinde atomic update + bakiye kontrolü
+      const result = await manager.query(
+        `UPDATE ingredients 
+         SET current_stock = current_stock - $1,
+             updated_at = NOW()
+         WHERE id = $2 AND tenant_id = $3 AND current_stock >= $1
+         RETURNING current_stock, name`,
+        [requiredAmount, item.ingredient_id, tenantId]
+      );
+
+      if (result.length === 0) {
+        throw new BadRequestException(`Yetersiz Stok: ${item.name} (Gereken: ${requiredAmount})`);
+      }
+
+      // Stok hareketini kaydet (Audit)
+      await manager.query(
+        `INSERT INTO stock_transactions 
+         (tenant_id, ingredient_id, type, quantity, previous_stock, new_stock, reference_id, reference_type, note)
+         VALUES ($1, $2, 'out', $3, $4, $5, $6, 'order', $7)`,
+        [
+          tenantId, 
+          item.ingredient_id, 
+          requiredAmount, 
+          item.current_stock, 
+          result[0].current_stock, 
+          referenceId, 
+          `${quantity} adet ürün satışı`
+        ]
       );
     }
-    return this.getRecipe(productId);
+  }
+
+  // ─── STOK İADESİ (İPTAL DURUMUNDA) ────────────────────────
+  async returnStockByRecipe(productId: string, quantity: number, tenantId: string, referenceId: string, trx?: any) {
+    const manager = trx || this.dataSource.manager;
+    const recipes = await manager.query(
+      `SELECT r.ingredient_id, r.quantity, i.current_stock FROM recipes r 
+       JOIN ingredients i ON i.id = r.ingredient_id WHERE r.product_id = $1`,
+      [productId]
+    );
+
+    for (const item of recipes) {
+      const returnAmount = Number(item.quantity) * quantity;
+      const newStock = Number(item.current_stock) + returnAmount;
+
+      await manager.query(
+        `UPDATE ingredients SET current_stock = $1 WHERE id = $2`,
+        [newStock, item.ingredient_id]
+      );
+
+      await manager.query(
+        `INSERT INTO stock_transactions 
+         (tenant_id, ingredient_id, type, quantity, previous_stock, new_stock, reference_id, reference_type, note)
+         VALUES ($1, $2, 'in', $3, $4, $5, $6, 'order_cancel', 'İptal edilen sipariş iadesi')`,
+        [tenantId, item.ingredient_id, returnAmount, item.current_stock, newStock, referenceId]
+      );
+    }
   }
 
   // ─── STOK HAREKETLERİ GEÇMİŞİ ────────────────────────────

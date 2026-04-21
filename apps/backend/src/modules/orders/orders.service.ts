@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Order, OrderItem } from './entities/order.entity';
 import { EventsGateway } from '../../websocket/events.gateway';
+import { InventoryService } from '../inventory/inventory.service';
 
 @Injectable()
 export class OrdersService {
@@ -17,6 +18,7 @@ export class OrdersService {
     private readonly itemRepo: Repository<OrderItem>,
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
+    private readonly inventoryService: InventoryService,
   ) {}
 
   // ─── TÜM SİPARİŞLERİ LİSTELE ─────────────────────────────
@@ -66,115 +68,58 @@ export class OrdersService {
   }
 
   // ─── YENİ SİPARİŞ ────────────────────────────────────────
-  async create(tenantId: string, data: {
-    branch_id: string;
-    table_id?: string;
-    type: string;
-    waiter_id?: string;
-    customer_id?: string;
-    customer_name?: string;
-    customer_phone?: string;
-    customer_note?: string;
-    source?: string;
-    items: {
-      product_id: string;
-      station_id?: string;
-      quantity: number;
-      unit_price: number;
-      notes?: string;
-      modifiers?: any[];
-    }[];
-  }) {
+  async create(tenantId: string, data: any) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      // Sipariş numarası al
+      // 1. Sipariş numarası al (Atomic SQL)
       const numResult = await queryRunner.query(
         `SELECT COALESCE(MAX(order_number), 999) + 1 AS next FROM orders WHERE branch_id = $1`,
         [data.branch_id],
       );
       const orderNumber = numResult[0].next;
 
-      // Tutarları hesapla
+      // 2. İlk hesaplamalar ve vergi kontrolü
       let subtotal = 0;
       let taxTotal = 0;
-      const itemsData = [];
-
       for (const item of data.items) {
         const itemTotal = Number(item.unit_price) * item.quantity;
         subtotal += itemTotal;
-
-        // Ürün vergi oranını çek
-        const [productRow] = await queryRunner.query(
-          `SELECT tax_rate, station_id FROM products WHERE id = $1`,
-          [item.product_id],
-        );
+        const [productRow] = await queryRunner.query(`SELECT tax_rate FROM products WHERE id = $1`, [item.product_id]);
         const taxRate = productRow?.tax_rate || 8;
-        const itemTax = (itemTotal * taxRate) / (100 + taxRate);
-        taxTotal += itemTax;
-
-        itemsData.push({
-          ...item,
-          station_id: item.station_id || productRow?.station_id,
-          total_price: itemTotal,
-          status: 'pending',
-          modifiers: item.modifiers || [],
-        });
+        taxTotal += (itemTotal * taxRate) / (100 + taxRate);
       }
 
-      const total = subtotal;
-
-      // Siparişi oluştur
+      // 3. Siparişi Kaydet
       const [orderRow] = await queryRunner.query(
         `INSERT INTO orders 
-          (tenant_id, branch_id, table_id, order_number, type, status, waiter_id,
-           customer_id, customer_name, customer_phone, customer_note, source,
-           subtotal, tax_total, total)
-         VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8,$9,$10,$11,$12,$13,$14)
-         RETURNING *`,
-        [
-          tenantId, data.branch_id, data.table_id || null, orderNumber,
-          data.type, data.waiter_id || null,
-          data.customer_id || null, data.customer_name || null,
-          data.customer_phone || null, data.customer_note || null,
-          data.source || 'pos', subtotal, taxTotal, total,
-        ],
+          (tenant_id, branch_id, table_id, order_number, type, status, waiter_id, source, subtotal, tax_total, total)
+         VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8,$9,$10) RETURNING *`,
+        [tenantId, data.branch_id, data.table_id || null, orderNumber, data.type, data.waiter_id || null, data.source || 'pos', subtotal, taxTotal, subtotal]
       );
 
-      // Ürünleri kaydet
-      for (const item of itemsData) {
+      // 4. Ürünleri Kaydet ve STOK DÜŞÜMÜ Yap
+      for (const item of data.items) {
+        const itemTotal = Number(item.unit_price) * item.quantity;
         await queryRunner.query(
-          `INSERT INTO order_items 
-            (order_id, product_id, station_id, quantity, unit_price, total_price, status, notes, modifiers)
-           VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8)`,
-          [
-            orderRow.id, item.product_id, item.station_id, item.quantity,
-            item.unit_price, item.total_price, item.notes || null,
-            JSON.stringify(item.modifiers),
-          ],
+          `INSERT INTO order_items (order_id, product_id, quantity, unit_price, total_price, status, modifiers)
+           VALUES ($1,$2,$3,$4,$5,'pending',$6)`,
+          [orderRow.id, item.product_id, item.quantity, item.unit_price, itemTotal, JSON.stringify(item.modifiers || [])]
         );
+
+        // STOK DÜŞÜMÜ (Atomic)
+        await this.inventoryService.deductStockByRecipe(item.product_id, item.quantity, tenantId, orderRow.id, queryRunner.manager);
       }
 
-      // Masa durumunu "occupied" yap
       if (data.table_id) {
-        await queryRunner.query(
-          `UPDATE tables SET status = 'occupied' WHERE id = $1`,
-          [data.table_id],
-        );
+        await queryRunner.query(`UPDATE tables SET status = 'occupied' WHERE id = $1`, [data.table_id]);
       }
 
       await queryRunner.commitTransaction();
-
-      // Tam siparişi yükle
       const fullOrder = await this.findById(orderRow.id, tenantId);
-
-      // Gerçek zamanlı bildirim → tüm istemciler
       this.eventsGateway.emitToTenant(tenantId, 'order.created', fullOrder);
-      // Mutfak ekranına özel bildirim
-      this.eventsGateway.emitToKitchen(data.branch_id, 'kitchen.new_order', fullOrder);
-
       return fullOrder;
     } catch (err) {
       await queryRunner.rollbackTransaction();
@@ -186,59 +131,68 @@ export class OrdersService {
 
   // ─── SİPARİŞE ÜRÜN EKLE ──────────────────────────────────
   async addItems(orderId: string, tenantId: string, items: any[]) {
-    const order = await this.findById(orderId, tenantId);
-    if (['closed', 'cancelled'].includes(order.status)) {
-      throw new BadRequestException('Kapalı siparişe ürün eklenemez');
-    }
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    let addedSubtotal = 0;
-    for (const item of items) {
-      const itemTotal = Number(item.unit_price) * item.quantity;
-      addedSubtotal += itemTotal;
+    try {
+      const order = await this.findById(orderId, tenantId);
+      if (['closed', 'cancelled'].includes(order.status)) throw new BadRequestException('Kapalı siparişe ürün eklenemez');
 
-      const newItem = this.itemRepo.create({
-        order_id: orderId,
-        product_id: item.product_id,
-        station_id: item.station_id,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        total_price: itemTotal,
-        notes: item.notes,
-        modifiers: item.modifiers || [],
-        status: 'pending',
+      let addedSubtotal = 0;
+      for (const item of items) {
+        const itemTotal = Number(item.unit_price) * item.quantity;
+        addedSubtotal += itemTotal;
+
+        await queryRunner.manager.save(OrderItem, {
+          order_id: orderId,
+          product_id: item.product_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: itemTotal,
+          status: 'pending',
+          modifiers: item.modifiers || [],
+        });
+
+        // STOK DÜŞÜMÜ
+        await this.inventoryService.deductStockByRecipe(item.product_id, item.quantity, tenantId, orderId, queryRunner.manager);
+      }
+
+      await queryRunner.manager.update(Order, orderId, {
+        subtotal: Number(order.subtotal) + addedSubtotal,
+        total: Number(order.total) + addedSubtotal,
       });
-      await this.itemRepo.save(newItem);
+
+      await queryRunner.commitTransaction();
+      const updated = await this.findById(orderId, tenantId);
+      this.eventsGateway.emitToTenant(tenantId, 'order.updated', updated);
+      return updated;
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
     }
-
-    // Toplam güncelle
-    await this.orderRepo.update(orderId, {
-      subtotal: Number(order.subtotal) + addedSubtotal,
-      total: Number(order.total) + addedSubtotal,
-    });
-
-    const updated = await this.findById(orderId, tenantId);
-    this.eventsGateway.emitToTenant(tenantId, 'order.updated', updated);
-    this.eventsGateway.emitToKitchen(order.branch_id, 'kitchen.new_items', {
-      orderId,
-      items: updated.items.filter((i) => i.status === 'pending'),
-    });
-
-    return updated;
   }
 
   // ─── SİPARİŞ DURUMU GÜNCELLE ─────────────────────────────
   async updateStatus(id: string, tenantId: string, status: string) {
     const order = await this.findById(id, tenantId);
 
+    // İptal durumunda stok iadesi
+    if (status === 'cancelled' && order.status !== 'cancelled') {
+      for (const item of order.items) {
+        if (item.status !== 'cancelled') {
+          await this.inventoryService.returnStockByRecipe(item.product_id, item.quantity, tenantId, id);
+        }
+      }
+    }
+
     const updates: any = { status };
     if (status === 'closed') {
       updates.closed_at = new Date();
-      // Masayı serbest bırak
       if (order.table_id) {
-        await this.dataSource.query(
-          `UPDATE tables SET status = 'available' WHERE id = $1`,
-          [order.table_id],
-        );
+        await this.dataSource.query(`UPDATE tables SET status = 'available' WHERE id = $1`, [order.table_id]);
       }
     }
 
@@ -253,6 +207,10 @@ export class OrdersService {
     const order = await this.findById(orderId, tenantId);
     const item = order.items.find((i) => i.id === itemId);
     if (!item) throw new NotFoundException('Ürün bulunamadı');
+    if (item.status === 'cancelled') return order;
+
+    // STOK İADESİ
+    await this.inventoryService.returnStockByRecipe(item.product_id, item.quantity, tenantId, orderId);
 
     await this.itemRepo.update(itemId, { status: 'cancelled' });
     const cancelledTotal = Number(item.total_price);
@@ -268,17 +226,12 @@ export class OrdersService {
   }
 
   // ─── AKTİF SİPARİŞLER (MUTFAK) ───────────────────────────
-  async getActiveOrdersForKitchen(branchId: string, stationId?: string) {
-    const qb = this.orderRepo.createQueryBuilder('o')
+  async getActiveOrdersForKitchen(branchId: string) {
+    return this.orderRepo.createQueryBuilder('o')
       .leftJoinAndSelect('o.items', 'items')
       .where('o.branch_id = :branchId', { branchId })
       .andWhere('o.status IN (:...statuses)', { statuses: ['pending', 'confirmed', 'preparing'] })
-      .orderBy('o.created_at', 'ASC');
-
-    if (stationId) {
-      qb.andWhere('items.station_id = :stationId', { stationId });
-    }
-
-    return qb.getMany();
+      .orderBy('o.created_at', 'ASC')
+      .getMany();
   }
 }

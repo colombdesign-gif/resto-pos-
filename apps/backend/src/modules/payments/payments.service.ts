@@ -86,10 +86,10 @@ export class PaymentsService {
     await queryRunner.startTransaction();
 
     try {
-      // Ödeme kaydı
-      await queryRunner.query(
+      // 1. Ana ödeme kaydı
+      const [paymentRow] = await queryRunner.query(
         `INSERT INTO payments (order_id, tenant_id, method, amount, change_amount, reference, iyzico_payment_id, status, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', $8)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', $8) RETURNING id`,
         [
           orderId, tenantId, data.method, data.amount,
           data.change_amount || 0, data.reference || null,
@@ -97,10 +97,19 @@ export class PaymentsService {
         ],
       );
 
+      // 2. Parçalı ödeme detayı (Sub-payment item)
+      // Mixed ödemelerde frontend farklı yöntemleri tek tek gönderebilir veya 
+      // bu endpoint tek bir yöntemi "ödeme parçası" olarak işleyebilir.
+      await queryRunner.query(
+        `INSERT INTO payment_items (payment_id, method, amount)
+         VALUES ($1, $2, $3)`,
+        [paymentRow.id, data.method === 'mixed' ? 'cash' : data.method, data.amount],
+      );
+
       const newPaidAmount = Number(order.paid_amount) + data.amount;
       const isFullyPaid = newPaidAmount >= Number(order.total) - 0.01;
 
-      // Sipariş güncelle
+      // 3. Sipariş güncelle
       if (isFullyPaid) {
         await queryRunner.query(
           `UPDATE orders SET paid_amount = $1, status = 'closed', closed_at = NOW() WHERE id = $2`,
@@ -117,8 +126,8 @@ export class PaymentsService {
             status: 'available',
           });
         }
-        // Stok düş
-        await this.deductStock(orderId, tenantId, queryRunner);
+        // NOT: Stok düşümü artık sipariş oluşturulduğunda veya ürün eklendiğinde yapılıyor (OrdersService).
+        // Burada tekrar stok düşmek mükerrer (double-deduct) hatasına yol açar.
       } else {
         await queryRunner.query(
           `UPDATE orders SET paid_amount = $1 WHERE id = $2`,

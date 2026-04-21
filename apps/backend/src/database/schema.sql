@@ -311,6 +311,17 @@ CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
 CREATE INDEX IF NOT EXISTS idx_payments_tenant ON payments(tenant_id, created_at DESC);
 
 -- ============================================================
+-- PAYMENT ITEMS (Ödeme Parçaları - Parçalı Ödeme Desteği)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS payment_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  payment_id UUID NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+  method VARCHAR(30) NOT NULL CHECK (method IN ('cash','card')),
+  amount NUMERIC(10,2) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================
 -- CASH SESSIONS (Kasa Seansları)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS cash_sessions (
@@ -335,7 +346,7 @@ CREATE TABLE IF NOT EXISTS ingredients (
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   unit VARCHAR(30) NOT NULL DEFAULT 'adet' CHECK (unit IN ('gram','kg','ml','lt','adet','kutu','çay kaşığı','yemek kaşığı')),
-  current_stock NUMERIC(12,3) DEFAULT 0,
+  current_stock NUMERIC(12,3) DEFAULT 0 CHECK (current_stock >= 0),
   critical_stock NUMERIC(12,3) DEFAULT 0,
   cost_per_unit NUMERIC(10,4) DEFAULT 0,
   supplier VARCHAR(255),
