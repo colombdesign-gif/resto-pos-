@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import {
   Plus, RefreshCw, Users, Clock, ChevronDown,
-  Circle, Square, Loader2, Filter
+  Circle, Square, Loader2, Filter, LayoutGrid
 } from 'lucide-react';
 
 interface Table {
