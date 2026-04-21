@@ -7,12 +7,13 @@ import { useAuthStore } from '@/store/authStore';
 import clsx from 'clsx';
 import {
   LayoutDashboard, UtensilsCrossed, Package, Users, BarChart3,
-  Building2, Settings, ChefHat, LogOut, ArrowLeft, Brain, UserCog
+  Building2, Settings, ChefHat, LogOut, ArrowLeft, Brain, UserCog, Grid3X3
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/admin/menu', icon: UtensilsCrossed, label: 'Menü Yönetimi' },
+  { href: '/admin/tables', icon: Grid3X3, label: 'Masa Yönetimi' },
   { href: '/admin/inventory', icon: Package, label: 'Stok & Reçete' },
   { href: '/admin/customers', icon: Users, label: 'Müşteriler' },
   { href: '/admin/users', icon: UserCog, label: 'Kullanıcılar' },

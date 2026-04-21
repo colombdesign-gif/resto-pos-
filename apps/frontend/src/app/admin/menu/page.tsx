@@ -75,6 +75,32 @@ export default function MenuPage() {
     } catch (err: any) { toast.error(err.message); }
   };
 
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const data = {
+      name: formData.get('name'),
+      icon: formData.get('icon') || '🍔',
+      color: formData.get('color') || '#f97316',
+    };
+    if (!data.name) { toast.error('Kategori adı zorunludur'); return; }
+    try {
+      await api.post('/menu/categories', data);
+      toast.success('Kategori eklendi');
+      setShowCategoryModal(false);
+      fetchData();
+    } catch (err: any) { toast.error(err.message); }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    if (!confirm('Kategoriyi silmek istediğinizden emin misiniz? (İçindeki ürünler kategorisiz kalacaktır)')) return;
+    try {
+      await api.delete(`/menu/categories/${id}`);
+      toast.success('Kategori silindi');
+      fetchData();
+    } catch (err: any) { toast.error(err.message); }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Ürünü silmek istediğinizden emin misiniz?')) return;
     try {
@@ -196,6 +222,35 @@ export default function MenuPage() {
               <button onClick={() => { setShowProductModal(false); setEditingProduct(null); }} className="btn-secondary flex-1">İptal</button>
               <button onClick={handleSaveProduct} className="btn-primary flex-1">Kaydet</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Kategori Modal */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="glass-card w-full max-w-md p-6 animate-slide-in">
+            <h2 className="text-lg font-bold text-white mb-5">Yeni Kategori Ekle</h2>
+            <form onSubmit={handleSaveCategory} className="space-y-4">
+              <div>
+                <label className="text-sm text-slate-300 mb-1.5 block">Kategori Adı *</label>
+                <input name="name" className="input" placeholder="Örn: Tatlılar" required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm text-slate-300 mb-1.5 block">İkon</label>
+                  <input name="icon" className="input" placeholder="🍔" defaultValue="🍔" />
+                </div>
+                <div>
+                  <label className="text-sm text-slate-300 mb-1.5 block">Renk</label>
+                  <input name="color" type="color" className="input h-10 p-1" defaultValue="#f97316" />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button type="button" onClick={() => setShowCategoryModal(false)} className="btn-secondary flex-1">İptal</button>
+                <button type="submit" className="btn-primary flex-1">Ekle</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
