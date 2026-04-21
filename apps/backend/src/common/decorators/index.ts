@@ -21,3 +21,5 @@ export const BranchId = createParamDecorator(
     return request.user?.branch_id || request.headers['x-branch-id'];
   },
 );
+
+export * from './public.decorator';
