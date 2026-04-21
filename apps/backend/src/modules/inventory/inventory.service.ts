@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
@@ -27,6 +27,8 @@ export class Recipe {
 
 @Injectable()
 export class InventoryService {
+  private readonly logger = new Logger(InventoryService.name);
+
   constructor(
     @InjectRepository(Ingredient)
     private readonly ingredientRepo: Repository<Ingredient>,
@@ -135,7 +137,9 @@ export class InventoryService {
       );
 
       if (result.length === 0) {
-        throw new BadRequestException(`Yetersiz Stok: ${item.name} (Gereken: ${requiredAmount})`);
+        const msg = `Yetersiz Stok: ${item.name} (Gereken: ${requiredAmount})`;
+        this.logger.warn(`Stok düşümü başarısız: ${msg} - Tenant: ${tenantId}`);
+        throw new BadRequestException(msg);
       }
 
       // Stok hareketini kaydet (Audit)

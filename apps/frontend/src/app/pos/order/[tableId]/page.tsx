@@ -40,12 +40,21 @@ export default function OrderPage() {
   const { addItemsToOrder } = useOrderStore();
 
   useEffect(() => {
+    // Şubeleri yükle (özellikle takeaway/delivery ve yeni masalar için gerekli)
+    api.get('/branches').then((res: any) => {
+      const branchList = res.data || res;
+      if (branchList.length > 0 && !branchId) {
+        // Eğer hala branchId yoksa (takeaway veya table yüklenirken hata oluştuysa) varsayılanı kullan
+        setBranchId(branchList[0].id);
+      }
+    }).catch(() => {});
+
     // Masa adını al
     if (tableId !== 'takeaway' && tableId !== 'delivery') {
       api.get(`/tables/${tableId}`).then((res: any) => {
         const t = res.data || res;
         setTableName(t.name || 'Masa');
-        setBranchId(t.branch_id);
+        if (t.branch_id) setBranchId(t.branch_id);
       }).catch(() => setTableName('Masa'));
 
       // Aktif sipariş var mı?

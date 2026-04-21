@@ -130,6 +130,14 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   clearCart: () => set({ cart: { type: 'dine_in', items: [] } }),
 
   submitOrder: async (data) => {
+    // Savunma: branch_id yoksa veya items boşsa hata ver
+    if (!data.branch_id || data.branch_id === '') {
+      throw new Error('Lütfen bir şube seçin. (Branch ID missing)');
+    }
+    if (!data.items || data.items.length === 0) {
+      throw new Error('Sipariş sepeti boş olamaz.');
+    }
+
     const res: any = await api.post('/orders', data);
     const order = res.data || res;
     set((state) => ({
@@ -141,6 +149,8 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   },
 
   addItemsToOrder: async (orderId, items) => {
+    if (!items || items.length === 0) return;
+    
     const res: any = await api.post(`/orders/${orderId}/items`, { items });
     const order = res.data || res;
     set((state) => ({

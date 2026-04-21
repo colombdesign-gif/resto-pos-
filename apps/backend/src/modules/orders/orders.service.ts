@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -11,6 +12,8 @@ import { InventoryService } from '../inventory/inventory.service';
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     @InjectRepository(Order)
     private readonly orderRepo: Repository<Order>,
@@ -69,6 +72,20 @@ export class OrdersService {
 
   // ─── YENİ SİPARİŞ ────────────────────────────────────────
   async create(tenantId: string, data: any) {
+    this.logger.log(`Yeni sipariş isteği - Tenant: ${tenantId}, Data: ${JSON.stringify(data)}`);
+
+    if (!tenantId) {
+      throw new BadRequestException('İşletme kimliği (tenantId) eksik');
+    }
+
+    if (!data.branch_id || data.branch_id === '') {
+      throw new BadRequestException('Şube bilgisi eksik (branch_id required)');
+    }
+
+    if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
+      throw new BadRequestException('Sipariş içeriği boş olamaz');
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -81,7 +98,7 @@ export class OrdersService {
          WHERE branch_id = $1`,
         [data.branch_id],
       );
-      const orderNumber = numResult[0].next;
+      const orderNumber = numResult[0]?.next || 1000;
 
       // 2. Tutarları hesapla
       let subtotal = 0;
@@ -89,23 +106,36 @@ export class OrdersService {
       const itemsData: any[] = [];
 
       for (const item of data.items) {
-        const itemTotal = Number(item.unit_price) * item.quantity;
+        const qty = Number(item.quantity) || 1;
+        const price = Number(item.unit_price) || 0;
+        const itemTotal = price * qty;
+        
         subtotal += itemTotal;
-        const [productRow] = await queryRunner.query(
+        
+        const products = await queryRunner.query(
           `SELECT tax_rate, station_id FROM products WHERE id = $1`,
           [item.product_id],
         );
-        const taxRate = productRow?.tax_rate || 8;
+        const productRow = products[0];
+        
+        const taxRate = Number(productRow?.tax_rate || 8);
         taxTotal += (itemTotal * taxRate) / (100 + taxRate);
+        
         itemsData.push({
           ...item,
-          station_id: item.station_id || productRow?.station_id,
+          quantity: qty,
+          unit_price: price,
+          station_id: item.station_id || productRow?.station_id || null,
           total_price: itemTotal,
         });
       }
 
-      // 3. Siparişi kaydet
-      const [orderRow] = await queryRunner.query(
+      // 3. Siparişi kaydet (UUID alanlarını temizle)
+      const sanitizedTableId = data.table_id === '' ? null : (data.table_id || null);
+      const sanitizedWaiterId = data.waiter_id === '' ? null : (data.waiter_id || null);
+      const sanitizedCustomerId = data.customer_id === '' ? null : (data.customer_id || null);
+
+      const insertResult = await queryRunner.query(
         `INSERT INTO orders 
           (tenant_id, branch_id, table_id, order_number, type, status, waiter_id,
            customer_id, customer_name, customer_phone, customer_note, source,
@@ -113,13 +143,25 @@ export class OrdersService {
          VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8,$9,$10,$11,$12,$13,$14)
          RETURNING *`,
         [
-          tenantId, data.branch_id, data.table_id || null, orderNumber,
-          data.type || 'dine_in', data.waiter_id || null,
-          data.customer_id || null, data.customer_name || null,
-          data.customer_phone || null, data.customer_note || null,
-          data.source || 'pos', subtotal, taxTotal, subtotal,
+          tenantId, 
+          data.branch_id, 
+          sanitizedTableId, 
+          orderNumber,
+          data.type || 'dine_in', 
+          sanitizedWaiterId,
+          sanitizedCustomerId, 
+          data.customer_name || null,
+          data.customer_phone || null, 
+          data.customer_note || null,
+          data.source || 'pos', 
+          subtotal, 
+          taxTotal, 
+          subtotal,
         ],
       );
+      
+      const orderRow = insertResult[0];
+      if (!orderRow) throw new Error('Sipariş kaydı oluşturulamadı (RETURNING empty)');
 
       // 4. Ürünleri kaydet + stok düşümü
       for (const item of itemsData) {
@@ -128,23 +170,28 @@ export class OrdersService {
             (order_id, product_id, station_id, quantity, unit_price, total_price, status, notes, modifiers)
            VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8)`,
           [
-            orderRow.id, item.product_id, item.station_id || null,
-            item.quantity, item.unit_price, item.total_price,
-            item.notes || null, JSON.stringify(item.modifiers || []),
+            orderRow.id, 
+            item.product_id, 
+            item.station_id,
+            item.quantity, 
+            item.unit_price, 
+            item.total_price,
+            item.notes || null, 
+            JSON.stringify(item.modifiers || []),
           ],
         );
 
-        // STOK DÜŞÜMÜ (Atomic — reçete varsa düşer, yoksa skip)
+        // STOK DÜŞÜMÜ
         await this.inventoryService.deductStockByRecipe(
           item.product_id, item.quantity, tenantId, orderRow.id, queryRunner.manager,
         );
       }
 
       // 5. Masayı occupied yap
-      if (data.table_id) {
+      if (sanitizedTableId) {
         await queryRunner.query(
           `UPDATE tables SET status = 'occupied' WHERE id = $1`,
-          [data.table_id],
+          [sanitizedTableId],
         );
       }
 
@@ -154,15 +201,26 @@ export class OrdersService {
       this.eventsGateway.emitToTenant(tenantId, 'order.created', fullOrder);
       this.eventsGateway.emitToKitchen(data.branch_id, 'kitchen.new_order', fullOrder);
       return fullOrder;
-    } catch (err) {
+    } catch (err: any) {
       await queryRunner.rollbackTransaction();
-      throw err;
+      this.logger.error(`Sipariş oluşturma hatası: ${err.message}`, err.stack);
+      
+      if (err.code === '23502') {
+        throw new BadRequestException(`Zorunlu alan eksik: ${err.column}`);
+      }
+      if (err.code === '22P02') {
+        throw new BadRequestException('Geçersiz veri formatı (UUID hatası)');
+      }
+      if (err.status === 400) throw err; // BadRequestException ise aynen fırlat
+      
+      throw new Error(`Sipariş oluşturulamadı: ${err.message}`);
     } finally {
       await queryRunner.release();
     }
   }
 
   // ─── SİPARİŞE ÜRÜN EKLE ──────────────────────────────────
+
   async addItems(orderId: string, tenantId: string, items: any[]) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
