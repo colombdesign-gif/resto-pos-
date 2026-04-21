@@ -35,6 +35,7 @@ export default function OrderPage() {
   const [tableName, setTableName] = useState('');
   const [activeOrder, setActiveOrder] = useState<any>(null);
   const [addingToExisting, setAddingToExisting] = useState(false);
+  const [branchId, setBranchId] = useState<string>('');
 
   const { addItemsToOrder } = useOrderStore();
 
@@ -44,6 +45,7 @@ export default function OrderPage() {
       api.get(`/tables/${tableId}`).then((res: any) => {
         const t = res.data || res;
         setTableName(t.name || 'Masa');
+        setBranchId(t.branch_id);
       }).catch(() => setTableName('Masa'));
 
       // Aktif sipariş var mı?
@@ -110,7 +112,7 @@ export default function OrderPage() {
       } else {
         // Yeni sipariş
         const orderData = {
-          branch_id: 'demo-branch',  // Gerçek uygulamada seçilen şube
+          branch_id: branchId,
           table_id: tableId !== 'takeaway' && tableId !== 'delivery' ? tableId : undefined,
           type: tableId === 'takeaway' ? 'takeaway' : tableId === 'delivery' ? 'delivery' : 'dine_in',
           waiter_id: user?.id,
