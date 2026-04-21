@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
@@ -199,5 +199,32 @@ export class InventoryService {
     }
     query += ` ORDER BY st.created_at DESC LIMIT 200`;
     return this.dataSource.query(query, params);
+  }
+
+  // ─── REÇETE CRUD ──────────────────────────────────────────
+  async getRecipe(productId: string) {
+    return this.dataSource.query(
+      `SELECT r.*, i.name as ingredient_name, i.unit, i.cost_per_unit
+       FROM recipes r
+       JOIN ingredients i ON i.id = r.ingredient_id
+       WHERE r.product_id = $1`,
+      [productId],
+    );
+  }
+
+  async saveRecipe(productId: string, items: { ingredient_id: string; quantity: number }[]) {
+    // Mevcut reçeteyi sil
+    await this.recipeRepo.delete({ product_id: productId });
+    // Yeni reçeteyi kaydet
+    for (const item of items) {
+      await this.recipeRepo.save(
+        this.recipeRepo.create({
+          product_id: productId,
+          ingredient_id: item.ingredient_id,
+          quantity: item.quantity,
+        }),
+      );
+    }
+    return this.getRecipe(productId);
   }
 }
