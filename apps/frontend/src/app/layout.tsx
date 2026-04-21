@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Toaster } from 'react-hot-toast';
+import DebugTools from './DebugTools';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -38,47 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="theme-color" content="#f97316" />
       </head>
       <body className={inter.className}>
-        <div id="app-root-overlay" style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          backgroundColor: '#f97316',
-          color: 'white',
-          fontSize: '12px',
-          fontWeight: 'bold',
-          textAlign: 'center',
-          padding: '4px',
-          zIndex: 99999,
-          pointerEvents: 'none'
-        }}>
-          SİSTEM GÜNCELLENDİ (v1.0.4-RELOADED) — Eğer bu barı görüyorsanız kurulum başarılıdır.
-        </div>
-        <button 
-          onClick={() => {
-            if ('serviceWorker' in navigator) {
-              navigator.serviceWorker.getRegistrations().then(regs => {
-                regs.forEach(r => r.unregister());
-                window.location.reload();
-              });
-            }
-          }}
-          style={{
-            position: 'fixed',
-            bottom: '20px',
-            left: '20px',
-            backgroundColor: '#ef4444',
-            color: 'white',
-            padding: '8px 12px',
-            borderRadius: '8px',
-            fontSize: '12px',
-            zIndex: 99999,
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
-          }}
-        >
-          Hafızayı Sıfırla (Cache Clear)
-        </button>
+        <DebugTools />
         {children}
         <Toaster
           position="top-right"
