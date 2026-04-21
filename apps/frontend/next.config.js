@@ -12,6 +12,10 @@ const nextConfig = {
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL,
   },
   staticPageGenerationTimeout: 1000,
+  experimental: {
+    cpus: 1,
+    workerThreads: false,
+  },
 };
 
 module.exports = nextConfig;
