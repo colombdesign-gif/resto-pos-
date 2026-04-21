@@ -1,8 +1,8 @@
 {
-  "name": "restopos-backend",
+  "name": "hesap-getir-backend",
   "version": "1.0.0",
-  "description": "RestoPOS SaaS - NestJS Backend API",
-  "author": "RestoPOS Team",
+  "description": "Hesap Getir SaaS - NestJS Backend API",
+  "author": "Hesap Getir Team",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {

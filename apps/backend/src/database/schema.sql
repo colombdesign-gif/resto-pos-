@@ -1,5 +1,4 @@
--- ============================================================
--- RestoPOS SaaS — Tam Veritabanı Şeması
+-- Hesap Getir SaaS — Tam Veritabanı Şeması
 -- PostgreSQL 16+
 -- ============================================================
 

@@ -1,7 +1,7 @@
 {
-  "name": "RestoPOS — Restoran Yönetim Sistemi",
-  "short_name": "RestoPOS",
-  "description": "Profesyonel bulut tabanlı restoran POS ve yönetim sistemi",
+  "name": "Hesap Getir POS",
+  "short_name": "Hesap Getir",
+  "description": "Hesap Getir Akıllı Restoran Otomasyon Sistemi",
   "start_url": "/pos/tables",
   "display": "standalone",
   "background_color": "#0f172a",

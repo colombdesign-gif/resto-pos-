@@ -6,7 +6,7 @@ import { Toaster } from 'react-hot-toast';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'RestoPOS — Profesyonel Restoran POS Sistemi',
+  title: 'Hesap Getir — Profesyonel Restoran POS Sistemi',
   description: 'Bulut tabanlı multi-tenant restoran ve kafe yönetim sistemi',
   keywords: 'restoran pos, kafe yönetim, adisyon sistemi, restoran yazılımı',
   manifest: '/manifest.json',
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'RestoPOS',
+    title: 'Hesap Getir',
   },
 };
 
