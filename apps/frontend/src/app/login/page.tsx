@@ -105,6 +105,9 @@ export default function LoginPage() {
                 Ücretsiz Deneyin
               </Link>
             </p>
+            <div className="mt-2 text-[10px] text-slate-500 font-mono">
+              Build Version: v1.0.4-RELOADED
+            </div>
           </div>
 
           {/* Demo hesaplar */}
