@@ -9,14 +9,25 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     super();
   }
 
-  canActivate(context: ExecutionContext) {
+  async canActivate(context: ExecutionContext) {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-    if (isPublic) {
-      return true;
+
+    try {
+      // super.canActivate hem boolean dönebilir hem Promise dönebilir.
+      // İçerisinde passport.authenticate('jwt') çalışır ve request.user'ı doldurur.
+      const result = await super.canActivate(context);
+      if (result) return true;
+    } catch (err) {
+      // Eğer rota public ise hata fırlatma, sadece request.user boş kalacaktır.
+      if (isPublic) {
+        return true;
+      }
+      throw err;
     }
-    return super.canActivate(context);
+
+    return isPublic;
   }
 }
