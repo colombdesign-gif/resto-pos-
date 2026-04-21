@@ -16,15 +16,18 @@ export class ReportsService {
 
     const groupFormat = groupBy === 'month' ? 'YYYY-MM' : groupBy === 'week' ? 'IYYY-IW' : 'YYYY-MM-DD';
 
+    // FIX: Satış = ödeme verisinden türetilmeli
     let query = `
       SELECT
         TO_CHAR(o.created_at, '${groupFormat}') as period,
         COUNT(DISTINCT o.id) as order_count,
-        COALESCE(SUM(o.total), 0) as revenue,
-        COALESCE(SUM(o.tax_total), 0) as tax,
-        COALESCE(SUM(o.discount_total), 0) as discount,
-        COALESCE(AVG(o.total), 0) as avg_order_value
+        COALESCE(SUM(DISTINCT o.total), 0) as revenue,
+        COALESCE(SUM(DISTINCT o.tax_total), 0) as tax,
+        COALESCE(SUM(DISTINCT o.discount_total), 0) as discount,
+        COALESCE(AVG(DISTINCT o.total), 0) as avg_order_value,
+        COALESCE(SUM(p.amount), 0) as collected_amount
       FROM orders o
+      LEFT JOIN payments p ON p.order_id = o.id AND p.status = 'completed'
       WHERE o.tenant_id = $1
         AND o.status = 'closed'
         AND DATE(o.created_at) BETWEEN $2 AND $3
@@ -137,33 +140,50 @@ export class ReportsService {
     );
   }
 
-  // ─── DASHBOARD ÖZET ───────────────────────────────────────
+  // ─── DASHBOARD ÖZET (FIX: CROSS JOIN düzeltildi, SQL injection kapatıldı) ──
   async getDashboardStats(tenantId: string, branchId?: string) {
     const today = new Date().toISOString().split('T')[0];
-    const [today_stats] = await this.dataSource.query(
+
+    // FIX: Siparişler ve masalar ayrı sorgulanır — CROSS JOIN yapılmaz
+    const [orderStats] = await this.dataSource.query(
       `SELECT
-         COUNT(DISTINCT o.id) as today_orders,
-         COALESCE(SUM(o.total), 0) as today_revenue,
-         COUNT(DISTINCT CASE WHEN o.status NOT IN ('closed','cancelled') THEN o.id END) as active_orders,
-         COUNT(DISTINCT CASE WHEN t.status = 'occupied' THEN t.id END) as occupied_tables
+         COUNT(DISTINCT CASE WHEN DATE(o.created_at) = $2 AND o.status = 'closed' THEN o.id END) as today_orders,
+         COALESCE(SUM(CASE WHEN DATE(o.created_at) = $2 AND o.status = 'closed' THEN o.total ELSE 0 END), 0) as today_revenue,
+         COUNT(DISTINCT CASE WHEN o.status NOT IN ('closed','cancelled') THEN o.id END) as active_orders
        FROM orders o
-       CROSS JOIN tables t
        WHERE o.tenant_id = $1
-         AND t.branch_id ${branchId ? '= $2' : 'IS NOT NULL'}
-         AND (DATE(o.created_at) = '${today}' OR o.status NOT IN ('closed','cancelled'))`,
+         ${branchId ? 'AND o.branch_id = $3' : ''}`,
+      branchId ? [tenantId, today, branchId] : [tenantId, today],
+    );
+
+    // Masa doluluk — ayrı sorgu (no CROSS JOIN)
+    const [tableStats] = await this.dataSource.query(
+      `SELECT
+         COUNT(*) as total_tables,
+         COUNT(CASE WHEN t.status = 'occupied' THEN 1 END) as occupied_tables
+       FROM tables t
+       JOIN branches b ON b.id = t.branch_id
+       WHERE b.tenant_id = $1 AND t.is_active = true
+         ${branchId ? 'AND t.branch_id = $2' : ''}`,
       branchId ? [tenantId, branchId] : [tenantId],
     );
 
+    // FIX: SQL injection kapatıldı — parametrize sorgu
     const top_products = await this.dataSource.query(
       `SELECT p.name, SUM(oi.quantity) as qty
        FROM order_items oi
        JOIN orders o ON o.id = oi.order_id
        JOIN products p ON p.id = oi.product_id
-       WHERE o.tenant_id = $1 AND DATE(o.created_at) = '${today}'
+       WHERE o.tenant_id = $1 AND DATE(o.created_at) = $2
+         AND oi.status != 'cancelled'
        GROUP BY p.name ORDER BY qty DESC LIMIT 5`,
-      [tenantId],
+      [tenantId, today],
     );
 
-    return { today_stats, top_products };
+    return {
+      today_stats: { ...orderStats, ...tableStats },
+      top_products,
+    };
   }
 }
+

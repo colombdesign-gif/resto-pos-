@@ -232,41 +232,9 @@ export class PaymentsService {
     });
   }
 
-  // ─── OTOMATİK STOK DÜŞÜMÜ ─────────────────────────────────
-  private async deductStock(orderId: string, tenantId: string, queryRunner: any) {
-    try {
-      const items = await queryRunner.query(
-        `SELECT oi.product_id, oi.quantity
-         FROM order_items oi WHERE oi.order_id = $1 AND oi.status != 'cancelled'`,
-        [orderId],
-      );
-
-      for (const item of items) {
-        const recipes = await queryRunner.query(
-          `SELECT r.ingredient_id, r.quantity FROM recipes r WHERE r.product_id = $1`,
-          [item.product_id],
-        );
-
-        for (const recipe of recipes) {
-          const totalQty = recipe.quantity * item.quantity;
-          await queryRunner.query(
-            `UPDATE ingredients 
-             SET current_stock = GREATEST(0, current_stock - $1), updated_at = NOW()
-             WHERE id = $2`,
-            [totalQty, recipe.ingredient_id],
-          );
-          await queryRunner.query(
-            `INSERT INTO stock_transactions (tenant_id, ingredient_id, type, quantity, reference_id, reference_type)
-             VALUES ($1, $2, 'out', $3, $4, 'order')`,
-            [tenantId, recipe.ingredient_id, totalQty, orderId],
-          );
-        }
-      }
-    } catch (e) {
-      // Stok düşme hatası siparişi etkilemesin
-      console.error('Stok düşme hatası:', e.message);
-    }
-  }
+  // ÖNEMLİ: deductStock metodu kaldırıldı.
+  // Stok düşümü artık OrdersService.create() içinde InventoryService.deductStockByRecipe() ile yapılıyor.
+  // Bu, mükerrer stok düşümünü engeller.
 
   // ─── KASA AÇ ─────────────────────────────────────────────
   async openCashSession(branchId: string, userId: string, openingCash: number) {
@@ -314,33 +282,53 @@ export class PaymentsService {
     return updated;
   }
 
-  // ─── GÜNLÜK KASA RAPORU ───────────────────────────────────
+  // ─── GÜNLÜK KASA RAPORU (FIX: sipariş toplamları ayrı hesaplanıyor) ──
   async getDailyReport(branchId: string, date: string) {
-    const [report] = await this.dataSource.query(
+    // Ödeme dökümü (yöntem bazlı)
+    const paymentBreakdown = await this.dataSource.query(
       `SELECT
-         COUNT(DISTINCT o.id) as order_count,
-         COALESCE(SUM(o.total), 0) as total_revenue,
          COALESCE(SUM(CASE WHEN p.method = 'cash' THEN p.amount ELSE 0 END), 0) as cash_total,
          COALESCE(SUM(CASE WHEN p.method = 'card' THEN p.amount ELSE 0 END), 0) as card_total,
          COALESCE(SUM(CASE WHEN p.method = 'iyzico' THEN p.amount ELSE 0 END), 0) as iyzico_total,
-         COALESCE(SUM(o.tax_total), 0) as tax_total,
-         COALESCE(SUM(o.discount_total), 0) as discount_total
-       FROM orders o
-       LEFT JOIN payments p ON p.order_id = o.id
-       WHERE o.branch_id = $1 AND DATE(o.created_at) = $2 AND o.status = 'closed'`,
+         COALESCE(SUM(p.amount), 0) as collected_total
+       FROM payments p
+       JOIN orders o ON o.id = p.order_id
+       WHERE o.branch_id = $1 AND DATE(o.created_at) = $2
+         AND p.status = 'completed'`,
       [branchId, date],
     );
-    return report;
+
+    // Sipariş istatistikleri (ayrı sorgu — JOIN şişmesini engeller)
+    const [orderStats] = await this.dataSource.query(
+      `SELECT
+         COUNT(*) as order_count,
+         COALESCE(SUM(total), 0) as total_revenue,
+         COALESCE(SUM(tax_total), 0) as tax_total,
+         COALESCE(SUM(discount_total), 0) as discount_total
+       FROM orders
+       WHERE branch_id = $1 AND DATE(created_at) = $2 AND status = 'closed'`,
+      [branchId, date],
+    );
+
+    return { ...orderStats, ...(paymentBreakdown[0] || {}) };
   }
 
-  // ─── ÖDEME GEÇMİŞİ ───────────────────────────────────────
-  async getOrderPayments(orderId: string) {
-    return this.dataSource.query(
-      `SELECT p.*, u.name as processed_by_name
-       FROM payments p
-       LEFT JOIN users u ON u.id = p.processed_by
-       WHERE p.order_id = $1 ORDER BY p.created_at ASC`,
-      [orderId],
-    );
+  // ─── ÖDEME GEÇMİŞİ (FIX: tenant izolasyonu eklendi) ──────
+  async getOrderPayments(orderId: string, tenantId?: string) {
+    let query = `
+      SELECT p.*, u.name as processed_by_name
+      FROM payments p
+      LEFT JOIN users u ON u.id = p.processed_by
+      WHERE p.order_id = $1
+    `;
+    const params: any[] = [orderId];
+
+    if (tenantId) {
+      query += ` AND p.tenant_id = $2`;
+      params.push(tenantId);
+    }
+
+    query += ` ORDER BY p.created_at ASC`;
+    return this.dataSource.query(query, params);
   }
 }

@@ -36,8 +36,13 @@ export class TablesService {
     Object.assign(table, data);
     const saved = await this.tableRepo.save(table);
 
-    // Gerçek zamanlı güncelleme
-    this.eventsGateway.emitToTenant(saved.branch_id, 'table.status_changed', saved);
+    // FIX: branch üzerinden doğru tenant_id'yi bul ve ona gönder
+    const [branch] = await this.dataSource.query(
+      `SELECT tenant_id FROM branches WHERE id = $1`, [saved.branch_id],
+    );
+    if (branch) {
+      this.eventsGateway.emitToTenant(branch.tenant_id, 'table.status_changed', saved);
+    }
     return saved;
   }
 
@@ -45,7 +50,12 @@ export class TablesService {
     const table = await this.findById(id);
     table.status = status;
     const saved = await this.tableRepo.save(table);
-    this.eventsGateway.emitToTenant(saved.branch_id, 'table.status_changed', saved);
+    const [branch] = await this.dataSource.query(
+      `SELECT tenant_id FROM branches WHERE id = $1`, [saved.branch_id],
+    );
+    if (branch) {
+      this.eventsGateway.emitToTenant(branch.tenant_id, 'table.status_changed', saved);
+    }
     return saved;
   }
 
@@ -57,7 +67,15 @@ export class TablesService {
       throw new BadRequestException('Farklı şubelerdeki masalar birleştirilemez');
     }
 
-    // Hedef masaya source'u ekle
+    // FIX: Kaynak masadaki aktif siparişleri kontrol et
+    const activeOrders = await this.dataSource.query(
+      `SELECT id FROM orders WHERE table_id = $1 AND status NOT IN ('closed', 'cancelled') LIMIT 1`,
+      [sourceId],
+    );
+    if (activeOrders.length > 0) {
+      throw new BadRequestException('Aktif siparişi olan masa birleştirilemez. Önce siparişi kapatın.');
+    }
+
     const merged = [...(target.merged_with || []), sourceId];
     await this.tableRepo.update(targetId, { merged_with: merged, status: 'occupied' });
     await this.tableRepo.update(sourceId, { status: 'occupied' });
@@ -69,12 +87,24 @@ export class TablesService {
     const table = await this.findById(id);
     const mergedIds = table.merged_with || [];
 
-    // Birleştirilmiş masaları serbest bırak
+    // FIX: Aktif sipariş kontrolü — siparişi olan masayı "available" yapma
     for (const mergedId of mergedIds) {
-      await this.tableRepo.update(mergedId, { status: 'available' });
+      const activeOrders = await this.dataSource.query(
+        `SELECT id FROM orders WHERE table_id = $1 AND status NOT IN ('closed', 'cancelled') LIMIT 1`,
+        [mergedId],
+      );
+      const newStatus = activeOrders.length > 0 ? 'occupied' : 'available';
+      await this.tableRepo.update(mergedId, { status: newStatus });
     }
 
-    await this.tableRepo.update(id, { merged_with: [], status: 'available' });
+    // Ana masa için de kontrol
+    const mainActiveOrders = await this.dataSource.query(
+      `SELECT id FROM orders WHERE table_id = $1 AND status NOT IN ('closed', 'cancelled') LIMIT 1`,
+      [id],
+    );
+    const mainStatus = mainActiveOrders.length > 0 ? 'occupied' : 'available';
+    await this.tableRepo.update(id, { merged_with: [], status: mainStatus });
+
     return this.findById(id);
   }
 

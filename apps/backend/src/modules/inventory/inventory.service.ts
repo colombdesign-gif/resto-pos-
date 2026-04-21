@@ -156,29 +156,33 @@ export class InventoryService {
     }
   }
 
-  // ─── STOK İADESİ (İPTAL DURUMUNDA) ────────────────────────
+  // ─── STOK İADESİ (İPTAL DURUMUNDA — FIX: Atomic SQL) ───────
   async returnStockByRecipe(productId: string, quantity: number, tenantId: string, referenceId: string, trx?: any) {
     const manager = trx || this.dataSource.manager;
     const recipes = await manager.query(
-      `SELECT r.ingredient_id, r.quantity, i.current_stock FROM recipes r 
-       JOIN ingredients i ON i.id = r.ingredient_id WHERE r.product_id = $1`,
+      `SELECT r.ingredient_id, r.quantity FROM recipes r WHERE r.product_id = $1`,
       [productId]
     );
 
     for (const item of recipes) {
       const returnAmount = Number(item.quantity) * quantity;
-      const newStock = Number(item.current_stock) + returnAmount;
 
-      await manager.query(
-        `UPDATE ingredients SET current_stock = $1 WHERE id = $2`,
-        [newStock, item.ingredient_id]
+      // FIX: Atomic SQL — read-then-write yerine doğrudan güncelle
+      const [result] = await manager.query(
+        `UPDATE ingredients 
+         SET current_stock = current_stock + $1, updated_at = NOW()
+         WHERE id = $2
+         RETURNING current_stock`,
+        [returnAmount, item.ingredient_id]
       );
+
+      const previousStock = result ? Number(result.current_stock) - returnAmount : 0;
 
       await manager.query(
         `INSERT INTO stock_transactions 
          (tenant_id, ingredient_id, type, quantity, previous_stock, new_stock, reference_id, reference_type, note)
          VALUES ($1, $2, 'in', $3, $4, $5, $6, 'order_cancel', 'İptal edilen sipariş iadesi')`,
-        [tenantId, item.ingredient_id, returnAmount, item.current_stock, newStock, referenceId]
+        [tenantId, item.ingredient_id, returnAmount, previousStock, result?.current_stock || 0, referenceId]
       );
     }
   }

@@ -16,7 +16,8 @@ export class KitchenService {
   ) {}
 
   // Mutfaktaki aktif siparişler
-  async getKitchenOrders(branchId: string, stationId?: string) {
+  // FIX: tenantId filtresi eklendi
+  async getKitchenOrders(branchId: string, stationId?: string, tenantId?: string) {
     let query = `
       SELECT 
         o.id, o.order_number, o.type, o.status, o.table_id,
@@ -45,9 +46,16 @@ export class KitchenService {
     `;
 
     const params: any[] = [branchId];
+    let paramIdx = 2;
+
+    if (tenantId) {
+      query += ` AND o.tenant_id = $${paramIdx}`;
+      params.push(tenantId);
+      paramIdx++;
+    }
 
     if (stationId) {
-      query += ` AND oi.station_id = $2`;
+      query += ` AND oi.station_id = $${paramIdx}`;
       params.push(stationId);
     }
 
@@ -58,20 +66,25 @@ export class KitchenService {
   }
 
   // Ürün durumunu güncelle (Mutfak hazır işareti)
+  // FIX: tenant doğrulaması eklendi
   async updateItemStatus(itemId: string, status: string, tenantId: string) {
     const item = await this.itemRepo.findOne({ where: { id: itemId } });
     if (!item) throw new NotFoundException('Ürün bulunamadı');
 
-    await this.itemRepo.update(itemId, { status });
-
+    // Tenant doğrulaması: item'ın order'ı tenant'a ait mi?
     const order = await this.orderRepo.findOne({
-      where: { id: item.order_id },
+      where: { id: item.order_id, tenant_id: tenantId },
       relations: ['items'],
     });
+    if (!order) throw new NotFoundException('Sipariş bulunamadı');
+
+    await this.itemRepo.update(itemId, { status });
 
     // Tüm ürünler hazırsa sipariş durumunu "ready" yap
     const activeItems = order.items.filter((i) => i.status !== 'cancelled');
-    const allReady = activeItems.every((i) => i.status === 'ready' || i.status === 'served');
+    const allReady = activeItems.every(
+      (i) => i.id === itemId ? status === 'ready' || status === 'served' : i.status === 'ready' || i.status === 'served'
+    );
 
     if (allReady && order.status === 'preparing') {
       await this.orderRepo.update(order.id, { status: 'ready' });
@@ -91,9 +104,15 @@ export class KitchenService {
   }
 
   // Sipariş durumunu "preparing" yap (mutfak onayladı)
+  // FIX: tenant doğrulaması eklendi
   async startPreparing(orderId: string, tenantId: string) {
+    // Siparişin tenant'a ait olduğunu doğrula
+    const existing = await this.orderRepo.findOne({
+      where: { id: orderId, tenant_id: tenantId },
+    });
+    if (!existing) throw new NotFoundException('Sipariş bulunamadı');
+
     await this.orderRepo.update(orderId, { status: 'preparing' });
-    // Tüm pending item'ları preparing yap
     await this.itemRepo.update({ order_id: orderId, status: 'pending' }, { status: 'preparing' });
 
     const order = await this.orderRepo.findOne({

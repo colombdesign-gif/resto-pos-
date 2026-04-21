@@ -21,8 +21,11 @@ export class PaymentsController {
   }
 
   @Get('order/:orderId')
-  getOrderPayments(@Param('orderId') orderId: string) {
-    return this.svc.getOrderPayments(orderId);
+  getOrderPayments(
+    @Param('orderId') orderId: string,
+    @TenantId() tid: string,
+  ) {
+    return this.svc.getOrderPayments(orderId, tid);
   }
 
   @Post('session/open')
