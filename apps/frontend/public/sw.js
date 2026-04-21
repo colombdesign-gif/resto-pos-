@@ -7,7 +7,7 @@
  * - Sayfa navigasyonu: Network First → Offline sayfası
  */
 
-const CACHE_NAME = 'restopos-v1';
+const CACHE_NAME = 'restopos-v2';
 const OFFLINE_URL = '/offline';
 
 // Cache'lenecek statik kaynaklar

@@ -60,6 +60,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 window.addEventListener('load', function() {
                   navigator.serviceWorker.register('/sw.js').then(function(reg) {
                     console.log('[PWA] Service Worker kayıtlı:', reg.scope);
+                    
+                    // Yeni versiyon gelirse otomatik sayfayı yenile
+                    reg.onupdatefound = () => {
+                      const installingWorker = reg.installing;
+                      installingWorker.onstatechange = () => {
+                        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                          console.log('[PWA] Yeni içerik mevcut, yenileniyor...');
+                          window.location.reload();
+                        }
+                      };
+                    };
                   }).catch(function(err) {
                     console.warn('[PWA] SW kayıt hatası:', err);
                   });
@@ -68,6 +79,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             `,
           }}
         />
+        {/* Sürüm Göstergesi (FIX: Cache durumunu anlamak için) */}
+        <div id="app-version" style={{
+          position: 'fixed',
+          bottom: '10px',
+          right: '10px',
+          fontSize: '10px',
+          color: '#475569',
+          pointerEvents: 'none',
+          zIndex: 9999,
+          opacity: 0.5
+        }}>
+          v1.0.3-stable
+        </div>
       </body>
     </html>
   );
