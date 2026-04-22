@@ -320,8 +320,36 @@ export class OrdersService {
     return updated;
   }
 
+  // ─── ÜRÜN DURUMU GÜNCELLEME (Masa/Garson) ─────────────────
+  async updateItemStatus(orderId: string, itemId: string, tenantId: string, status: string) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    
+    // Geçerli durum kontrolü (preparing, ready, delivered)
+    if (!['pending', 'preparing', 'ready', 'delivered'].includes(status)) {
+      throw new BadRequestException('Geçersiz sipariş kalemi durumu');
+    }
+
+    try {
+      await queryRunner.query(
+        `UPDATE order_items SET status = $1, updated_at = NOW() WHERE id = $2 AND order_id = $3`,
+        [status, itemId, orderId]
+      );
+      const updated = await this.findById(orderId, tenantId);
+      this.eventsGateway.emitToTenant(tenantId, 'order.updated', updated);
+      
+      // Eğer teslim edildiyse, mutfak ekranı da veya pos ekranı da görsün
+      if (status === 'delivered') {
+        this.eventsGateway.emitToKitchen(updated.branch_id, 'kitchen.order_updated', updated);
+      }
+      return updated;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
   // ─── ÜRÜN İPTAL (FIX: Transaction ile) ─────────────────────
-  async cancelItem(orderId: string, itemId: string, tenantId: string) {
+  async cancelItem(orderId: string, itemId: string, tenantId: string, reason?: string, waiterId?: string) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -351,6 +379,26 @@ export class OrdersService {
          WHERE id = $2`,
         [cancelledTotal, orderId],
       );
+
+      // Audit kaydını oluştur
+      if (reason) {
+        // İptal notu olarak da order_items'a kaydet 
+        await queryRunner.query(
+          `UPDATE order_items SET notes = CONCAT(notes, ' [İptal Sebebi: ', $1::text, ']') WHERE id = $2`,
+          [reason, itemId]
+        );
+        
+        await queryRunner.query(
+          `INSERT INTO audit_logs (tenant_id, user_id, action, resource, resource_id, metadata)
+           VALUES ($1, $2, 'order_item_cancelled', 'order_item', $3, $4)`,
+          [
+             tenantId,
+             waiterId || null,
+             itemId,
+             JSON.stringify({ reason, orderId, cancelledTotal, productId: item.product_id })
+          ]
+        );
+      }
 
       await queryRunner.commitTransaction();
 

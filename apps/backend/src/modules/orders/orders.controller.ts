@@ -70,12 +70,24 @@ export class OrdersController {
     return this.svc.updateStatus(id, tid, body.status);
   }
 
+  @Patch(':id/items/:itemId/status')
+  updateItemStatus(
+    @Param('id') orderId: string,
+    @Param('itemId') itemId: string,
+    @TenantId() tid: string,
+    @Body() body: { status: string },
+  ) {
+    return this.svc.updateItemStatus(orderId, itemId, tid, body.status);
+  }
+
   @Delete(':id/items/:itemId')
   cancelItem(
     @Param('id') orderId: string,
     @Param('itemId') itemId: string,
     @TenantId() tid: string,
+    @Query('reason') reason?: string,
+    @CurrentUser('id') waiterId?: string,
   ) {
-    return this.svc.cancelItem(orderId, itemId, tid);
+    return this.svc.cancelItem(orderId, itemId, tid, reason, waiterId);
   }
 }

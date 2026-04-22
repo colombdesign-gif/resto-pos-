@@ -36,6 +36,9 @@ export default function OrderPage() {
   const [activeOrder, setActiveOrder] = useState<any>(null);
   const [addingToExisting, setAddingToExisting] = useState(false);
   const [branchId, setBranchId] = useState<string>('');
+  const [cancelModal, setCancelModal] = useState<{ itemId: string, name: string } | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
 
   const { addItemsToOrder } = useOrderStore();
 
@@ -140,6 +143,37 @@ export default function OrderPage() {
       toast.error(err.message || 'Sipariş gönderilemedi');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleUpdateItemStatus = async (itemId: string, newStatus: string) => {
+    if (!activeOrder) return;
+    try {
+      await api.patch(`/orders/${activeOrder.id}/items/${itemId}/status`, { status: newStatus });
+      toast.success('Ürün durumu güncellendi!');
+      // State is automatically updated via WebSocket 'order.updated' 
+    } catch (err: any) {
+      toast.error('Durum güncellenemedi');
+    }
+  };
+
+  const handleCancelItem = async () => {
+    if (!activeOrder || !cancelModal) return;
+    if (cancelReason.trim().length < 3) {
+      toast.error('Lütfen mantıklı bir iptal/iade sebebi girin.');
+      return;
+    }
+
+    setCancelling(true);
+    try {
+      await api.delete(`/orders/${activeOrder.id}/items/${cancelModal.itemId}?reason=${encodeURIComponent(cancelReason)}`);
+      toast.success('Ürün iptal edildi.');
+      setCancelModal(null);
+      setCancelReason('');
+    } catch (err: any) {
+      toast.error(err.message || 'İptal işlemi başarısız');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -263,16 +297,55 @@ export default function OrderPage() {
             <div className="space-y-2">
               {activeOrder.items.map((item: any) => {
                 const product = products.find(p => p.id === item.product_id);
+                // Durum Türkçe Map
+                const statusMap: any = {
+                  pending: { label: 'Bekliyor', color: 'text-slate-400 bg-slate-400/10 border-slate-400/20' },
+                  preparing: { label: 'Hazırlanıyor', color: 'text-orange-400 bg-orange-400/10 border-orange-400/20' },
+                  ready: { label: 'Hazır', color: 'text-blue-400 bg-blue-400/10 border-blue-400/20' },
+                  delivered: { label: 'Masada', color: 'text-green-400 bg-green-400/10 border-green-400/20' },
+                  served: { label: 'Masada', color: 'text-green-400 bg-green-400/10 border-green-400/20' },
+                  cancelled: { label: 'İptal', color: 'text-red-400 bg-red-400/10 border-red-400/20' }
+                };
+                const s = statusMap[item.status] || statusMap['pending'];
+
                 return (
-                  <div key={item.id} className="flex items-center gap-2 p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-white truncate">{product?.name || item.product?.name || 'Ürün'}</div>
-                      <div className="text-xs text-orange-400 font-semibold">₺{Number(item.total_price).toFixed(2)}</div>
+                  <div key={item.id} className="flex flex-col gap-2 p-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-white truncate flex items-center gap-2">
+                          <span className="w-6 text-center text-xs font-bold text-slate-300 bg-slate-700 rounded p-0.5">{item.quantity}x</span>
+                          {product?.name || item.product?.name || 'Ürün'}
+                        </div>
+                        <div className="text-xs text-orange-400 font-semibold mt-1">₺{Number(item.total_price).toFixed(2)}</div>
+                      </div>
+                      
+                      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                        <div className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border ${s.color}`}>
+                          {s.label}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="w-6 text-center text-sm font-bold text-white">{item.quantity}x</span>
-                      {item.status === 'cancelled' && <span className="text-[10px] text-red-400 bg-red-400/10 px-1 rounded">İptal</span>}
-                    </div>
+                    
+                    {item.status !== 'cancelled' && (
+                      <div className="flex justify-end gap-1.5 border-t border-slate-700/50 pt-2 mt-1">
+                        {/* Hazır olanı Teslim Et Butonu */}
+                        {item.status === 'ready' && (
+                          <button 
+                            onClick={() => handleUpdateItemStatus(item.id, 'delivered')}
+                            className="bg-green-500/20 text-green-400 hover:bg-green-500/40 text-xs px-2 py-1 rounded"
+                          >
+                            Teslim Et
+                          </button>
+                        )}
+                        {/* İptal Butonu */}
+                        <button 
+                          onClick={() => setCancelModal({ itemId: item.id, name: product?.name || 'Ürün' })}
+                          className="bg-red-500/20 text-red-400 hover:bg-red-500/40 text-xs px-2 py-1 rounded"
+                        >
+                          İptal / İade
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -387,6 +460,45 @@ export default function OrderPage() {
             }
           }}
         />
+      )}
+
+      {/* İptal Modal'ı */}
+      {cancelModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className="bg-dark-800 border border-slate-700 w-full max-w-sm rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-white mb-2 text-center text-red-400">Ürün İptali</h3>
+            <p className="text-sm text-slate-300 text-center mb-4">
+              <span className="font-bold text-white">{cancelModal.name}</span> ürününü iptal ediyorsunuz. Lütfen yönetici kayıtları için sebep girin.
+            </p>
+            <input
+              autoFocus
+              type="text"
+              placeholder="Örn: Sipariş yanlış girildi / Müşteri vazgeçti"
+              className="input w-full bg-slate-900 border-slate-700 text-white mb-4"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCancelItem();
+              }}
+            />
+            <div className="flex gap-2">
+              <button 
+                onClick={() => { setCancelModal(null); setCancelReason(''); }}
+                className="btn-secondary flex-1 py-2"
+                disabled={cancelling}
+              >
+                Vazgeç
+              </button>
+              <button 
+                onClick={handleCancelItem}
+                className="btn-primary flex-1 py-2 bg-red-500 hover:bg-red-600 shadow-red-500/20"
+                disabled={cancelling || cancelReason.trim().length === 0}
+              >
+                {cancelling ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'İptal Et'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
