@@ -67,6 +67,7 @@ export default function OrderPage() {
         if (order?.id) {
           setActiveOrder(order);
           setCurrentOrder(order);
+          setAddingToExisting(true); // Masada sipariş varsa otomatik "üzerine ekle" moduna geç
         }
       }).catch(() => {});
     } else {
@@ -135,6 +136,12 @@ export default function OrderPage() {
           unit_price: i.unit_price,
           notes: i.notes,
         })));
+        clearCart(); // Sepeti temizle
+        
+        // Güncel veriyi hemen çek ki liste yenilensin
+        const res: any = await api.get(`/orders/${activeOrder.id}`);
+        setActiveOrder(res.data || res);
+        
         toast.success('Ürünler siparişe eklendi!');
       } else {
         // Yeni sipariş
