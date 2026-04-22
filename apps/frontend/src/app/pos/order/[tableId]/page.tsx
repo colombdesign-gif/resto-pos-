@@ -73,6 +73,11 @@ export default function OrderPage() {
       setTableName(tableId === 'takeaway' ? 'Paket Servis' : 'Teslimat');
     }
 
+    // Menü yükle
+    Promise.all([
+      api.get('/menu/categories'),
+      api.get('/menu/products'),
+    ]).then(([catRes, prodRes]: any) => {
       setCategories(catRes.data || catRes);
       setProducts(prodRes.data || prodRes);
     }).catch(() => {

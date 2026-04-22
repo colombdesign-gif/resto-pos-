@@ -38,6 +38,7 @@ export default function TablesPage() {
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
+  const [isEditMode, setIsEditMode] = useState(false);
   const [dragging, setDragging] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const hasMoved = useRef(false);
@@ -77,6 +78,7 @@ export default function TablesPage() {
 
   // Drag & Drop (masa pozisyonu)
   const handleMouseDown = (e: React.MouseEvent, tableId: string) => {
+    if (!isEditMode) return; // Düzenleme modu kapalıysa sürükleme yapma
     if (user?.role === 'kitchen' || user?.role === 'courier') return;
     const table = tables.find((t) => t.id === tableId)!;
     setDragging(tableId);
@@ -154,6 +156,18 @@ export default function TablesPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsEditMode(!isEditMode)}
+            className={clsx(
+              "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all border",
+              isEditMode 
+                ? "bg-orange-500 border-orange-400 text-white shadow-lg shadow-orange-500/20" 
+                : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700"
+            )}
+          >
+            {isEditMode ? 'Kaydet' : 'Düzeni Düzenle'}
+          </button>
+
           {/* Filtre */}
           <div className="flex items-center gap-1 bg-slate-800 rounded-xl p-1">
             {['all', 'available', 'occupied', 'reserved'].map((s) => (
