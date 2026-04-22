@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { getSocket } from '@/lib/socket';
 import { useOrderStore } from '@/store/orderStore';
 import { useAuthStore } from '@/store/authStore';
 import toast from 'react-hot-toast';
@@ -72,18 +73,27 @@ export default function OrderPage() {
       setTableName(tableId === 'takeaway' ? 'Paket Servis' : 'Teslimat');
     }
 
-    // Menü yükle
-    Promise.all([
-      api.get('/menu/categories'),
-      api.get('/menu/products'),
-    ]).then(([catRes, prodRes]: any) => {
       setCategories(catRes.data || catRes);
       setProducts(prodRes.data || prodRes);
     }).catch(() => {
       setCategories(DEMO_CATEGORIES);
       setProducts(DEMO_PRODUCTS);
     }).finally(() => setLoading(false));
-  }, [tableId]);
+
+    // Real-time güncellemeleri dinle
+    const socket = getSocket();
+    socket.on('order.updated', (updatedOrder: any) => {
+      // Eğer güncellenen sipariş şu an açık olan masaya (veya siparişe) aitse state'i güncelle
+      if (updatedOrder.id === activeOrder?.id || updatedOrder.table_id === tableId) {
+        setActiveOrder(updatedOrder);
+        setCurrentOrder(updatedOrder);
+      }
+    });
+
+    return () => {
+      socket.off('order.updated');
+    };
+  }, [tableId, activeOrder?.id]);
 
   const filteredProducts = products.filter((p) => {
     if (!p.is_available) return false;
@@ -149,9 +159,10 @@ export default function OrderPage() {
   const handleUpdateItemStatus = async (itemId: string, newStatus: string) => {
     if (!activeOrder) return;
     try {
-      await api.patch(`/orders/${activeOrder.id}/items/${itemId}/status`, { status: newStatus });
+      const res: any = await api.patch(`/orders/${activeOrder.id}/items/${itemId}/status`, { status: newStatus });
+      const updated = res.data || res;
+      setActiveOrder(updated); // Anında güncelle
       toast.success('Ürün durumu güncellendi!');
-      // State is automatically updated via WebSocket 'order.updated' 
     } catch (err: any) {
       toast.error('Durum güncellenemedi');
     }
@@ -166,7 +177,9 @@ export default function OrderPage() {
 
     setCancelling(true);
     try {
-      await api.delete(`/orders/${activeOrder.id}/items/${cancelModal.itemId}?reason=${encodeURIComponent(cancelReason)}`);
+      const res: any = await api.delete(`/orders/${activeOrder.id}/items/${cancelModal.itemId}?reason=${encodeURIComponent(cancelReason)}`);
+      const updated = res.data || res;
+      setActiveOrder(updated); // Anında güncelle
       toast.success('Ürün iptal edildi.');
       setCancelModal(null);
       setCancelReason('');

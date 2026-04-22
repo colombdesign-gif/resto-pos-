@@ -40,6 +40,8 @@ export default function TablesPage() {
   const [filter, setFilter] = useState<string>('all');
   const [dragging, setDragging] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const hasMoved = useRef(false);
+  const startPos = useRef({ x: 0, y: 0 });
 
   // Şube ID'sini user'dan al (gerçekte branch selector olacak)
   const branchId = user?.tenant_id; // Demo: ilk şube
@@ -76,13 +78,22 @@ export default function TablesPage() {
   // Drag & Drop (masa pozisyonu)
   const handleMouseDown = (e: React.MouseEvent, tableId: string) => {
     if (user?.role === 'kitchen' || user?.role === 'courier') return;
-    setDragging(tableId);
     const table = tables.find((t) => t.id === tableId)!;
+    setDragging(tableId);
     setDragOffset({ x: e.clientX - table.position_x, y: e.clientY - table.position_y });
+    hasMoved.current = false;
+    startPos.current = { x: e.clientX, y: e.clientY };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!dragging) return;
+
+    // Eğer masayı 5 pikselden fazla oynattıysa "sürükleme" say
+    const dist = Math.sqrt(Math.pow(e.clientX - startPos.current.x, 2) + Math.pow(e.clientY - startPos.current.y, 2));
+    if (dist > 5) {
+      hasMoved.current = true;
+    }
+
     setTables((prev) =>
       prev.map((t) =>
         t.id === dragging
@@ -107,7 +118,9 @@ export default function TablesPage() {
   };
 
   const handleTableClick = (table: Table) => {
-    if (dragging) return;
+    // Eğer masa sürüklendiyse (hasMoved) açma, sadece masayı taşımış olalım.
+    // Ama sadece tıklandıysa (hareket < 5px) sayfayı aç.
+    if (hasMoved.current) return;
     router.push(`/pos/order/${table.id}`);
   };
 
