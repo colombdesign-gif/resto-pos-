@@ -256,9 +256,34 @@ export default function OrderPage() {
           )}
         </div>
 
+        {/* Siparişteki mevcut ürünler */}
+        {activeOrder && activeOrder.items?.length > 0 && (
+          <div className="mb-4">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-2">Gönderilen Siparişler</h3>
+            <div className="space-y-2">
+              {activeOrder.items.map((item: any) => {
+                const product = products.find(p => p.id === item.product_id);
+                return (
+                  <div key={item.id} className="flex items-center gap-2 p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-white truncate">{product?.name || item.product?.name || 'Ürün'}</div>
+                      <div className="text-xs text-orange-400 font-semibold">₺{Number(item.total_price).toFixed(2)}</div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="w-6 text-center text-sm font-bold text-white">{item.quantity}x</span>
+                      {item.status === 'cancelled' && <span className="text-[10px] text-red-400 bg-red-400/10 px-1 rounded">İptal</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {cart.items.length > 0 && <div className="h-px bg-slate-700/50 my-4" />}
+          </div>
+        )}
+
         {/* Sepet ürünleri */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {cart.items.length === 0 ? (
+          {cart.items.length === 0 && (!activeOrder || activeOrder.items?.length === 0) ? (
             <div className="flex flex-col items-center justify-center h-40 text-center">
               <ShoppingCart className="w-12 h-12 text-slate-600 mb-3" />
               <p className="text-slate-500 text-sm">Menüden ürün seçin</p>

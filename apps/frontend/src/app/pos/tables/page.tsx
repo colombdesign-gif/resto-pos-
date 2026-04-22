@@ -54,7 +54,7 @@ export default function TablesPage() {
       if (!branchList.length) { setLoading(false); return; }
       const firstBranch = branchList[0];
 
-      const res: any = await api.get(`/tables/branch/${firstBranch.id}`);
+      const res: any = await api.get(`/tables/branch/${firstBranch.id}?_t=${Date.now()}`);
       setTables(res.data || res);
     } catch {
       // Demo verisi göster

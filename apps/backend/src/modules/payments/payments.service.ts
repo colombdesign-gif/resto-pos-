@@ -115,16 +115,23 @@ export class PaymentsService {
           `UPDATE orders SET paid_amount = $1, status = 'closed', closed_at = NOW() WHERE id = $2`,
           [newPaidAmount, orderId],
         );
-        // Masayı serbest bırak
+        // Sadece başka aktif siparişi yoksa masayı serbest bırak
         if (order.table_id) {
-          await queryRunner.query(
-            `UPDATE tables SET status = 'available' WHERE id = $1`,
-            [order.table_id],
+          const otherActiveOrders = await queryRunner.query(
+            `SELECT id FROM orders WHERE table_id = $1 AND status NOT IN ('closed', 'cancelled') AND id != $2 LIMIT 1`,
+            [order.table_id, order.id],
           );
-          this.eventsGateway.emitToTenant(tenantId, 'table.status_changed', {
-            id: order.table_id,
-            status: 'available',
-          });
+
+          if (otherActiveOrders.length === 0) {
+            await queryRunner.query(
+              `UPDATE tables SET status = 'available' WHERE id = $1`,
+              [order.table_id],
+            );
+            this.eventsGateway.emitToTenant(tenantId, 'table.status_changed', {
+              id: order.table_id,
+              status: 'available',
+            });
+          }
         }
         // NOT: Stok düşümü artık sipariş oluşturulduğunda veya ürün eklendiğinde yapılıyor (OrdersService).
         // Burada tekrar stok düşmek mükerrer (double-deduct) hatasına yol açar.
