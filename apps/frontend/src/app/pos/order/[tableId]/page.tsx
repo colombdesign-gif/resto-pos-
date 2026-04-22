@@ -297,16 +297,16 @@ export default function OrderPage() {
             <div className="space-y-2">
               {activeOrder.items.map((item: any) => {
                 const product = products.find(p => p.id === item.product_id);
-                // Durum Türkçe Map
+                // Durum — Garsonlar sadece 3 durum görür
                 const statusMap: any = {
-                  pending: { label: 'Bekliyor', color: 'text-slate-400 bg-slate-400/10 border-slate-400/20' },
-                  preparing: { label: 'Hazırlanıyor', color: 'text-orange-400 bg-orange-400/10 border-orange-400/20' },
-                  ready: { label: 'Hazır', color: 'text-blue-400 bg-blue-400/10 border-blue-400/20' },
-                  delivered: { label: 'Masada', color: 'text-green-400 bg-green-400/10 border-green-400/20' },
-                  served: { label: 'Masada', color: 'text-green-400 bg-green-400/10 border-green-400/20' },
-                  cancelled: { label: 'İptal', color: 'text-red-400 bg-red-400/10 border-red-400/20' }
+                  pending:    { label: 'Hazırlanıyor', color: 'text-orange-400 bg-orange-400/10 border-orange-400/20' },
+                  preparing:  { label: 'Hazırlanıyor', color: 'text-orange-400 bg-orange-400/10 border-orange-400/20' },
+                  ready:      { label: 'Hazır ★',        color: 'text-blue-300 bg-blue-400/20 border-blue-400/30' },
+                  delivered:  { label: 'Teslim Edildi', color: 'text-green-400 bg-green-400/10 border-green-400/20' },
+                  served:     { label: 'Teslim Edildi', color: 'text-green-400 bg-green-400/10 border-green-400/20' },
+                  cancelled:  { label: 'İptal',          color: 'text-red-400 bg-red-400/10 border-red-400/20'    },
                 };
-                const s = statusMap[item.status] || statusMap['pending'];
+                const s = statusMap[item.status] || statusMap['preparing'];
 
                 return (
                   <div key={item.id} className="flex flex-col gap-2 p-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50">

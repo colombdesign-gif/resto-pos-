@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import {
   Plus, RefreshCw, Users, Clock, ChevronDown,
-  Circle, Square, Loader2, Filter, LayoutGrid
+  Circle, Square, Loader2, Filter, LayoutGrid, Zap
 } from 'lucide-react';
 
 interface Table {
@@ -156,6 +156,14 @@ export default function TablesPage() {
               </button>
             ))}
           </div>
+
+          <button
+            onClick={() => router.push('/pos/quick-sale')}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-dark-900 bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 transition-all shadow-lg shadow-orange-500/20"
+          >
+            <Zap className="w-4 h-4" />
+            Hızlı Satış
+          </button>
 
           <button onClick={fetchTables} className="btn-secondary p-2.5">
             <RefreshCw className="w-4 h-4" />
