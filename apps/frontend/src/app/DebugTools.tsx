@@ -13,24 +13,7 @@ export default function DebugTools() {
 
   return (
     <>
-      <div id="app-root-overlay" style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: '#f97316',
-        color: 'white',
-        fontSize: '12px',
-        fontWeight: 'bold',
-        textAlign: 'center',
-        padding: '4px',
-        zIndex: 99999,
-        pointerEvents: 'none'
-      }}>
-        SİSTEM GÜNCELLENDİ (v1.0.4-RELOADED) — Eğer bu barı görüyorsanız kurulum başarılıdır.
-      </div>
-      
-      <button 
+      {/* SİSTEM GÜNCELLENDİ barı kaldırıldı */}      <button 
         onClick={() => {
           if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(regs => {

@@ -126,20 +126,19 @@ export class InventoryService {
     for (const item of recipes) {
       const requiredAmount = Number(item.quantity) * quantity;
       
-      // SQL seviyesinde atomic update + bakiye kontrolü
-      const result = await manager.query(
+      // SQL seviyesinde atomic update (ESNEK STOK: Bakiye eksiye düşebilir)
+      const [result] = await manager.query(
         `UPDATE ingredients 
          SET current_stock = current_stock - $1,
              updated_at = NOW()
-         WHERE id = $2 AND tenant_id = $3 AND current_stock >= $1
+         WHERE id = $2 AND tenant_id = $3
          RETURNING current_stock, name`,
         [requiredAmount, item.ingredient_id, tenantId]
       );
 
-      if (result.length === 0) {
-        const msg = `Yetersiz Stok: ${item.name} (Gereken: ${requiredAmount})`;
-        this.logger.warn(`Stok düşümü başarısız: ${msg} - Tenant: ${tenantId}`);
-        throw new BadRequestException(msg);
+      if (!result) {
+        this.logger.warn(`Stok düşümü için malzeme bulunamadı: ${item.ingredient_id} - Tenant: ${tenantId}`);
+        continue;
       }
 
       // Stok hareketini kaydet (Audit)
@@ -152,7 +151,7 @@ export class InventoryService {
           item.ingredient_id, 
           requiredAmount, 
           item.current_stock, 
-          result[0].current_stock, 
+          result.current_stock, 
           referenceId, 
           `${quantity} adet ürün satışı`
         ]
