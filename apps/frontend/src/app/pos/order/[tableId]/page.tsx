@@ -413,7 +413,11 @@ export default function OrderPage() {
                           <div className="flex flex-col gap-1">
                             {isReady && (
                               <button
-                                onClick={() => g.ids.forEach(id => handleUpdateItemStatus(id, 'delivered'))}
+                                onClick={async () => {
+                                  for (const id of g.ids) {
+                                    await handleUpdateItemStatus(id, 'delivered');
+                                  }
+                                }}
                                 className="w-6 h-6 rounded-md bg-green-500/20 hover:bg-green-500/40 flex items-center justify-center"
                                 title="Teslim Et"
                               >

@@ -49,10 +49,10 @@ export class OrdersService {
     return qb.getMany();
   }
 
-  // ─── AKTİF MASA SİPARİŞİ (FIX: tüm aktif durumları ara) ──
+  // ─── AKTİF MASA SİPARİŞİ ─────────────────────────────────
   async findActiveByTable(tableId: string) {
-    // Tüm "açık" durumları kontrol et — sadece pending/preparing değil
-    const activeStatuses = ['pending', 'confirmed', 'preparing', 'ready'];
+    // 'served' dahil — tüm ürünler teslim edilmiş ama ödeme henüz alınmamış siparişler de görünsün
+    const activeStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'served'];
     return this.orderRepo.findOne({
       where: activeStatuses.map(s => ({ table_id: tableId, status: s })),
       relations: ['items'],
@@ -324,25 +324,51 @@ export class OrdersService {
   async updateItemStatus(orderId: string, itemId: string, tenantId: string, status: string) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
-    
-    // Geçerli durum kontrolü (preparing, ready, delivered)
+    await queryRunner.startTransaction();
+
     if (!['pending', 'preparing', 'ready', 'delivered'].includes(status)) {
+      await queryRunner.release();
       throw new BadRequestException('Geçersiz sipariş kalemi durumu');
     }
 
     try {
       await queryRunner.query(
         `UPDATE order_items SET status = $1, updated_at = NOW() WHERE id = $2 AND order_id = $3`,
-        [status, itemId, orderId]
+        [status, itemId, orderId],
       );
+
+      // Tüm ürünler delivered veya cancelled mi? → Sipariş 'served' olsun
+      if (status === 'delivered') {
+        const remaining = await queryRunner.query(
+          `SELECT COUNT(*) AS cnt FROM order_items
+           WHERE order_id = $1 AND status NOT IN ('delivered', 'cancelled')`,
+          [orderId],
+        );
+        const openCount = Number(remaining[0]?.cnt ?? 1);
+
+        if (openCount === 0) {
+          // Tüm ürünler teslim edildi → sipariş served yapılsın (ödeme bekleniyor)
+          await queryRunner.query(
+            `UPDATE orders SET status = 'served', updated_at = NOW() WHERE id = $1`,
+            [orderId],
+          );
+          // Masa statüsünü GÜNCELLEME — ödeme alınana kadar occupied kalsın
+          // (masa 'available' sadece ödeme alınca olur)
+        }
+      }
+
+      await queryRunner.commitTransaction();
+
       const updated = await this.findById(orderId, tenantId);
       this.eventsGateway.emitToTenant(tenantId, 'order.updated', updated);
-      
-      // Eğer teslim edildiyse, mutfak ekranı da veya pos ekranı da görsün
+
       if (status === 'delivered') {
         this.eventsGateway.emitToKitchen(updated.branch_id, 'kitchen.order_updated', updated);
       }
       return updated;
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
     } finally {
       await queryRunner.release();
     }
