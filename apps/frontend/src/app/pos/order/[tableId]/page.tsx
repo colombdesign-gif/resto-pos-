@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
@@ -103,6 +103,10 @@ export default function OrderPage() {
   const [orderTab,         setOrderTab]         = useState<TabKey>('active');
   const [orderExpanded,    setOrderExpanded]    = useState(true);
 
+  // Stale closure fix: her zaman güncel activeOrder'a erişim
+  const activeOrderRef = useRef<any>(null);
+  useEffect(() => { activeOrderRef.current = activeOrder; }, [activeOrder]);
+
   useEffect(() => {
     api.get('/branches').then((res: any) => {
       const list = res.data || res;
@@ -138,7 +142,8 @@ export default function OrderPage() {
 
     const socket = getSocket();
     socket.on('order.updated', (updatedOrder: any) => {
-      if (updatedOrder.id === activeOrder?.id || updatedOrder.table_id === tableId) {
+      // tableId her zaman güncel — activeOrderRef ile stale closure'u çözüyoruz
+      if (updatedOrder.table_id === tableId || updatedOrder.id === activeOrderRef.current?.id) {
         setActiveOrder(updatedOrder);
         setCurrentOrder(updatedOrder);
       }
@@ -195,11 +200,20 @@ export default function OrderPage() {
   };
 
   const handleUpdateItemStatus = async (itemId: string, newStatus: string) => {
-    if (!activeOrder) return;
+    const order = activeOrderRef.current || activeOrder;
+    if (!order) return;
     try {
-      const res: any = await api.patch(`/orders/${activeOrder.id}/items/${itemId}/status`, { status: newStatus });
-      setActiveOrder(res.data || res);
+      await api.patch(`/orders/${order.id}/items/${itemId}/status`, { status: newStatus });
+      // Sunucudan taze veri çek — stale state sorununu önler
+      const fresh: any = await api.get(`/orders/${order.id}`);
+      const freshOrder = fresh.data || fresh;
+      setActiveOrder(freshOrder);
+      setCurrentOrder(freshOrder);
       toast.success('Durum güncellendi!');
+      // Teslim sonrası 'Teslim' sekmesine geç ki kullanıcı kayboldu sanmasın
+      if (newStatus === 'delivered') {
+        setTimeout(() => setOrderTab('done'), 300);
+      }
     } catch {
       toast.error('Durum güncellenemedi');
     }
