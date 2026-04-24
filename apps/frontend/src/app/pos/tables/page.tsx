@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
@@ -8,8 +8,8 @@ import { getSocket } from '@/lib/socket';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import {
-  Plus, RefreshCw, Users, Clock, ChevronDown,
-  Circle, Square, Loader2, Filter, LayoutGrid, Zap
+  Plus, RefreshCw, Users, Clock,
+  Loader2, LayoutGrid, Zap, Coffee, Circle
 } from 'lucide-react';
 
 interface Table {
@@ -23,35 +23,34 @@ interface Table {
   height: number;
   shape: string;
   floor_plan_id?: string;
+  active_order?: {
+    order_number: number;
+    total: number;
+    created_at: string;
+    item_count?: number;
+  };
 }
 
 const STATUS_CONFIG = {
-  available: { label: 'Boş', color: '#22c55e', bg: 'rgba(34,197,94,0.1)', border: '#22c55e' },
-  occupied:  { label: 'Dolu', color: '#f97316', bg: 'rgba(249,115,22,0.1)', border: '#f97316' },
-  reserved:  { label: 'Rezerve', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: '#3b82f6' },
-  cleaning:  { label: 'Temizleniyor', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: '#f59e0b' },
+  available: { label: 'Boş',          color: '#22c55e', bg: 'rgba(34,197,94,0.08)',   border: 'rgba(34,197,94,0.4)',   badge: 'bg-green-500/20 text-green-400 border-green-500/30' },
+  occupied:  { label: 'Dolu',         color: '#f97316', bg: 'rgba(249,115,22,0.08)',  border: 'rgba(249,115,22,0.4)',  badge: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
+  reserved:  { label: 'Rezerve',      color: '#3b82f6', bg: 'rgba(59,130,246,0.08)',  border: 'rgba(59,130,246,0.4)',  badge: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+  cleaning:  { label: 'Temizleniyor', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.4)', badge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
 };
 
 export default function TablesPage() {
   const router = useRouter();
-  const { user, tenant } = useAuthStore();
+  const { user } = useAuthStore();
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const hasMoved = useRef(false);
-  const startPos = useRef({ x: 0, y: 0 });
 
-  // Şube ID'sini user'dan al (gerçekte branch selector olacak)
-  const branchId = user?.tenant_id; // Demo: ilk şube
+  const branchId = user?.tenant_id;
 
   const fetchTables = useCallback(async () => {
     if (!branchId) return;
     try {
       setLoading(true);
-      // İlk şubeyi al
       const branches: any = await api.get('/branches');
       const branchList = branches.data || branches;
       if (!branchList.length) { setLoading(false); return; }
@@ -60,7 +59,6 @@ export default function TablesPage() {
       const res: any = await api.get(`/tables/branch/${firstBranch.id}?_t=${Date.now()}`);
       setTables(res.data || res);
     } catch {
-      // Demo verisi göster
       setTables(DEMO_TABLES);
     } finally {
       setLoading(false);
@@ -76,64 +74,21 @@ export default function TablesPage() {
     return () => { socket.off('table.status_changed'); };
   }, [fetchTables]);
 
-  // Drag & Drop (masa pozisyonu)
-  const handleMouseDown = (e: React.MouseEvent, tableId: string) => {
-    if (!isEditMode) return; // Düzenleme modu kapalıysa sürükleme yapma
-    if (user?.role === 'kitchen' || user?.role === 'courier') return;
-    const table = tables.find((t) => t.id === tableId)!;
-    setDragging(tableId);
-    setDragOffset({ x: e.clientX - table.position_x, y: e.clientY - table.position_y });
-    hasMoved.current = false;
-    startPos.current = { x: e.clientX, y: e.clientY };
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!dragging) return;
-
-    // Eğer masayı 5 pikselden fazla oynattıysa "sürükleme" say
-    const dist = Math.sqrt(Math.pow(e.clientX - startPos.current.x, 2) + Math.pow(e.clientY - startPos.current.y, 2));
-    if (dist > 5) {
-      hasMoved.current = true;
-    }
-
-    setTables((prev) =>
-      prev.map((t) =>
-        t.id === dragging
-          ? { ...t, position_x: e.clientX - dragOffset.x, position_y: e.clientY - dragOffset.y }
-          : t,
-      ),
-    );
-  };
-
-  const handleMouseUp = async () => {
-    if (!dragging) return;
-    const table = tables.find((t) => t.id === dragging);
-    if (table) {
-      try {
-        await api.patch(`/tables/${table.id}`, {
-          position_x: table.position_x,
-          position_y: table.position_y,
-        });
-      } catch {}
-    }
-    setDragging(null);
-  };
-
-  const handleTableClick = (table: Table) => {
-    // Eğer masa sürüklendiyse (hasMoved) açma, sadece masayı taşımış olalım.
-    // Ama sadece tıklandıysa (hareket < 5px) sayfayı aç.
-    if (hasMoved.current) return;
-    router.push(`/pos/order/${table.id}`);
-  };
-
   const filteredTables = filter === 'all' ? tables : tables.filter((t) => t.status === filter);
 
   const stats = {
-    total: tables.length,
+    total:    tables.length,
     occupied: tables.filter((t) => t.status === 'occupied').length,
-    available: tables.filter((t) => t.status === 'available').length,
+    available:tables.filter((t) => t.status === 'available').length,
     reserved: tables.filter((t) => t.status === 'reserved').length,
   };
+
+  function elapsedTime(createdAt?: string) {
+    if (!createdAt) return '';
+    const diff = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
+    if (diff < 60) return `${diff} dk`;
+    return `${Math.floor(diff / 60)} sa ${diff % 60} dk`;
+  }
 
   if (loading) {
     return (
@@ -156,18 +111,6 @@ export default function TablesPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsEditMode(!isEditMode)}
-            className={clsx(
-              "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all border",
-              isEditMode 
-                ? "bg-orange-500 border-orange-400 text-white shadow-lg shadow-orange-500/20" 
-                : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700"
-            )}
-          >
-            {isEditMode ? 'Kaydet' : 'Düzeni Düzenle'}
-          </button>
-
           {/* Filtre */}
           <div className="flex items-center gap-1 bg-slate-800 rounded-xl p-1">
             {['all', 'available', 'occupied', 'reserved'].map((s) => (
@@ -207,28 +150,23 @@ export default function TablesPage() {
       </div>
 
       {/* İstatistikler */}
-      <div className="flex gap-4 px-6 py-3 border-b border-slate-700/30">
+      <div className="flex gap-6 px-6 py-3 border-b border-slate-700/30">
         {[
-          { label: 'Toplam Masa', value: stats.total, color: 'text-slate-300' },
-          { label: 'Boş', value: stats.available, color: 'text-green-400' },
-          { label: 'Dolu', value: stats.occupied, color: 'text-orange-400' },
-          { label: 'Rezerve', value: stats.reserved, color: 'text-blue-400' },
+          { label: 'Toplam', value: stats.total,    color: 'text-slate-300', dot: '#94a3b8' },
+          { label: 'Boş',    value: stats.available, color: 'text-green-400', dot: '#22c55e' },
+          { label: 'Dolu',   value: stats.occupied,  color: 'text-orange-400',dot: '#f97316' },
+          { label: 'Rezerve',value: stats.reserved,  color: 'text-blue-400',  dot: '#3b82f6' },
         ].map((s) => (
-          <div key={s.label} className="text-center">
-            <div className={clsx('text-2xl font-bold', s.color)}>{s.value}</div>
-            <div className="text-xs text-slate-500">{s.label}</div>
+          <div key={s.label} className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.dot }} />
+            <span className={clsx('text-lg font-bold', s.color)}>{s.value}</span>
+            <span className="text-xs text-slate-500">{s.label}</span>
           </div>
         ))}
       </div>
 
-      {/* Kat planı canvas */}
-      <div
-        className="flex-1 relative overflow-auto bg-dark-900"
-        style={{ backgroundImage: 'radial-gradient(circle, #334155 1px, transparent 1px)', backgroundSize: '40px 40px' }}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-      >
+      {/* Masa Grid */}
+      <div className="flex-1 overflow-y-auto p-6">
         {filteredTables.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-8">
             <div className="w-20 h-20 rounded-2xl bg-slate-800 flex items-center justify-center mb-4">
@@ -238,42 +176,64 @@ export default function TablesPage() {
             <p className="text-slate-500 max-w-xs mt-2">Admin panelinden masa ekleyerek başlayın.</p>
           </div>
         ) : (
-          filteredTables.map((table) => {
-            const cfg = STATUS_CONFIG[table.status];
-            return (
-              <div
-                key={table.id}
-                className={clsx(
-                  'absolute flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-150',
-                  dragging === table.id && 'opacity-80 scale-105 z-50',
-                  table.shape === 'circle' ? 'rounded-full' : 'rounded-2xl',
-                )}
-                style={{
-                  left: table.position_x,
-                  top: table.position_y,
-                  width: table.width || 100,
-                  height: table.height || 80,
-                  backgroundColor: cfg.bg,
-                  border: `2px solid ${cfg.border}`,
-                  boxShadow: dragging === table.id
-                    ? `0 20px 40px ${cfg.border}40`
-                    : `0 4px 15px ${cfg.border}25`,
-                }}
-                onMouseDown={(e) => handleMouseDown(e, table.id)}
-                onClick={() => handleTableClick(table)}
-              >
-                <div className="text-sm font-bold text-white">{table.name}</div>
-                <div className="flex items-center gap-1 mt-0.5">
-                  <Users className="w-3 h-3" style={{ color: cfg.color }} />
-                  <span className="text-xs" style={{ color: cfg.color }}>{table.capacity}</span>
-                </div>
-                <div
-                  className="absolute -top-2 -right-2 w-4 h-4 rounded-full border-2 border-dark-900"
-                  style={{ backgroundColor: cfg.color }}
-                />
-              </div>
-            );
-          })
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            {filteredTables.map((table) => {
+              const cfg = STATUS_CONFIG[table.status];
+              const isOccupied = table.status === 'occupied';
+
+              return (
+                <button
+                  key={table.id}
+                  onClick={() => router.push(`/pos/order/${table.id}`)}
+                  className={clsx(
+                    'relative flex flex-col items-center justify-between p-4 rounded-2xl border transition-all duration-200 text-left group',
+                    'hover:scale-[1.03] hover:shadow-xl active:scale-[0.98]',
+                    table.shape === 'circle' ? 'rounded-full aspect-square' : 'rounded-2xl',
+                  )}
+                  style={{
+                    backgroundColor: cfg.bg,
+                    borderColor: cfg.border,
+                    boxShadow: isOccupied ? `0 4px 20px ${cfg.color}20` : 'none',
+                  }}
+                >
+                  {/* Durum göstergesi */}
+                  <div
+                    className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full"
+                    style={{ backgroundColor: cfg.color, boxShadow: `0 0 6px ${cfg.color}` }}
+                  />
+
+                  {/* Masa adı */}
+                  <div className="w-full">
+                    <div className="text-sm font-bold text-white truncate pr-4">{table.name}</div>
+                    <div className="flex items-center gap-1 mt-1">
+                      <Users className="w-3 h-3 flex-shrink-0" style={{ color: cfg.color }} />
+                      <span className="text-xs" style={{ color: cfg.color }}>{table.capacity} kişi</span>
+                    </div>
+                  </div>
+
+                  {/* Dolu masa bilgisi */}
+                  {isOccupied && table.active_order ? (
+                    <div className="w-full mt-3 pt-3 border-t border-slate-700/50 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-slate-400">#{table.active_order.order_number}</span>
+                        <div className="flex items-center gap-1 text-[10px] text-orange-300">
+                          <Clock className="w-2.5 h-2.5" />
+                          {elapsedTime(table.active_order.created_at)}
+                        </div>
+                      </div>
+                      <div className="text-sm font-bold text-orange-400">
+                        ₺{Number(table.active_order.total).toFixed(0)}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={clsx('mt-3 self-start text-[10px] font-semibold px-2 py-0.5 rounded-full border', cfg.badge)}>
+                      {cfg.label}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
@@ -282,13 +242,13 @@ export default function TablesPage() {
 
 // Demo masaları (API bağlanana kadar gösterilir)
 const DEMO_TABLES: Table[] = [
-  { id: '1', name: 'Masa 1', capacity: 4, status: 'available', position_x: 80, position_y: 80, width: 100, height: 80, shape: 'rectangle' },
-  { id: '2', name: 'Masa 2', capacity: 2, status: 'occupied', position_x: 220, position_y: 80, width: 100, height: 80, shape: 'rectangle' },
-  { id: '3', name: 'Masa 3', capacity: 6, status: 'reserved', position_x: 360, position_y: 80, width: 120, height: 80, shape: 'rectangle' },
-  { id: '4', name: 'Masa 4', capacity: 4, status: 'available', position_x: 80, position_y: 220, width: 100, height: 80, shape: 'rectangle' },
-  { id: '5', name: 'Masa 5', capacity: 2, status: 'occupied', position_x: 220, position_y: 220, width: 80, height: 80, shape: 'circle' },
-  { id: '6', name: 'Masa 6', capacity: 8, status: 'available', position_x: 360, position_y: 220, width: 140, height: 90, shape: 'rectangle' },
-  { id: '7', name: 'Bar 1', capacity: 2, status: 'occupied', position_x: 80, position_y: 360, width: 80, height: 60, shape: 'rectangle' },
-  { id: '8', name: 'Bar 2', capacity: 2, status: 'available', position_x: 180, position_y: 360, width: 80, height: 60, shape: 'rectangle' },
-  { id: '9', name: 'VIP',  capacity: 10, status: 'reserved', position_x: 520, position_y: 100, width: 160, height: 120, shape: 'rectangle' },
+  { id: '1', name: 'Masa 1', capacity: 4, status: 'available', position_x: 0, position_y: 0, width: 100, height: 80, shape: 'rectangle' },
+  { id: '2', name: 'Masa 2', capacity: 2, status: 'occupied',  position_x: 0, position_y: 0, width: 100, height: 80, shape: 'rectangle', active_order: { order_number: 42, total: 485, created_at: new Date(Date.now() - 25*60000).toISOString() } },
+  { id: '3', name: 'Masa 3', capacity: 6, status: 'reserved',  position_x: 0, position_y: 0, width: 120, height: 80, shape: 'rectangle' },
+  { id: '4', name: 'Masa 4', capacity: 4, status: 'available', position_x: 0, position_y: 0, width: 100, height: 80, shape: 'rectangle' },
+  { id: '5', name: 'Masa 5', capacity: 2, status: 'occupied',  position_x: 0, position_y: 0, width: 80,  height: 80, shape: 'circle',    active_order: { order_number: 38, total: 210, created_at: new Date(Date.now() - 8*60000).toISOString() } },
+  { id: '6', name: 'Masa 6', capacity: 8, status: 'available', position_x: 0, position_y: 0, width: 140, height: 90, shape: 'rectangle' },
+  { id: '7', name: 'Bar 1',  capacity: 2, status: 'occupied',  position_x: 0, position_y: 0, width: 80,  height: 60, shape: 'rectangle', active_order: { order_number: 41, total: 315, created_at: new Date(Date.now() - 45*60000).toISOString() } },
+  { id: '8', name: 'Bar 2',  capacity: 2, status: 'available', position_x: 0, position_y: 0, width: 80,  height: 60, shape: 'rectangle' },
+  { id: '9', name: 'VIP',    capacity: 10, status: 'reserved', position_x: 0, position_y: 0, width: 160, height: 120, shape: 'rectangle' },
 ];
