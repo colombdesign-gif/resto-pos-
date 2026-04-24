@@ -51,8 +51,9 @@ export class OrdersService {
 
   // ─── AKTİF MASA SİPARİŞİ ─────────────────────────────────
   async findActiveByTable(tableId: string) {
-    // 'served' dahil — tüm ürünler teslim edilmiş ama ödeme henüz alınmamış siparişler de görünsün
-    const activeStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'served'];
+    // DB CHECK: orders.status IN ('pending','confirmed','preparing','ready','delivered','cancelled','closed')
+    // 'served' DB'de YOK — 'delivered' tüm ürünler teslim edildi, ödeme bekleniyor
+    const activeStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivered'];
     return this.orderRepo.findOne({
       where: activeStatuses.map(s => ({ table_id: tableId, status: s })),
       relations: ['items'],
@@ -322,38 +323,47 @@ export class OrdersService {
 
   // ─── ÜRÜN DURUMU GÜNCELLEME (Masa/Garson) ─────────────────
   async updateItemStatus(orderId: string, itemId: string, tenantId: string, status: string) {
+    // Geçerli item statüleri (order_items CHECK): pending|preparing|ready|served|delivered|cancelled
+    if (!['pending', 'preparing', 'ready', 'delivered', 'served'].includes(status)) {
+      throw new BadRequestException('Geçersiz sipariş kalemi durumu');
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
-    if (!['pending', 'preparing', 'ready', 'delivered'].includes(status)) {
-      await queryRunner.release();
-      throw new BadRequestException('Geçersiz sipariş kalemi durumu');
-    }
-
     try {
+      // 1. Ürün durumunu güncelle
       await queryRunner.query(
         `UPDATE order_items SET status = $1, updated_at = NOW() WHERE id = $2 AND order_id = $3`,
         [status, itemId, orderId],
       );
 
-      // Tüm ürünler delivered veya cancelled mi? → Sipariş 'served' olsun
-      if (status === 'delivered') {
+      // 2. Tüm ürünler delivered/served/cancelled mi? → Order 'delivered' yap
+      // KRİTİK: orders tablosunda 'served' YOK (DB CHECK kısıtı ihlali → 500 hatası)
+      // orders.status için SADECE: pending|confirmed|preparing|ready|delivered|cancelled|closed
+      if (status === 'delivered' || status === 'served') {
         const remaining = await queryRunner.query(
           `SELECT COUNT(*) AS cnt FROM order_items
-           WHERE order_id = $1 AND status NOT IN ('delivered', 'cancelled')`,
+           WHERE order_id = $1 AND status NOT IN ('delivered', 'served', 'cancelled')`,
           [orderId],
         );
         const openCount = Number(remaining[0]?.cnt ?? 1);
 
         if (openCount === 0) {
-          // Tüm ürünler teslim edildi → sipariş served yapılsın (ödeme bekleniyor)
+          // Tüm ürünler teslim edildi → order 'delivered' (ödeme bekleniyor, masa hâlâ dolu)
           await queryRunner.query(
-            `UPDATE orders SET status = 'served', updated_at = NOW() WHERE id = $1`,
+            `UPDATE orders SET status = 'delivered', updated_at = NOW()
+             WHERE id = $1 AND status NOT IN ('closed', 'cancelled')`,
             [orderId],
           );
-          // Masa statüsünü GÜNCELLEME — ödeme alınana kadar occupied kalsın
-          // (masa 'available' sadece ödeme alınca olur)
+        } else {
+          // Kısmi teslim — order en azından 'preparing' olsun
+          await queryRunner.query(
+            `UPDATE orders SET status = 'preparing', updated_at = NOW()
+             WHERE id = $1 AND status = 'pending'`,
+            [orderId],
+          );
         }
       }
 
@@ -361,12 +371,10 @@ export class OrdersService {
 
       const updated = await this.findById(orderId, tenantId);
       this.eventsGateway.emitToTenant(tenantId, 'order.updated', updated);
-
-      if (status === 'delivered') {
-        this.eventsGateway.emitToKitchen(updated.branch_id, 'kitchen.order_updated', updated);
-      }
+      this.eventsGateway.emitToKitchen(updated.branch_id, 'kitchen.order_updated', updated);
       return updated;
     } catch (err) {
+      this.logger.error(`updateItemStatus hatası: ${err.message}`, err.stack);
       await queryRunner.rollbackTransaction();
       throw err;
     } finally {

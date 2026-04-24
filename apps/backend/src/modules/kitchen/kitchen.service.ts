@@ -15,8 +15,13 @@ export class KitchenService {
     private readonly dataSource: DataSource,
   ) {}
 
-  // Mutfaktaki aktif siparişler
-  // FIX: tenantId filtresi eklendi
+  /**
+   * Mutfaktaki aktif siparişler
+   * - order_items: pending / preparing / ready olanlar gösterilir
+   *   (delivered / served / cancelled gizlenir — bunlar teslim edilmiş)
+   * - orders: pending / confirmed / preparing / ready durumundakiler
+   *   (delivered/closed olanlar mutfaktan düşer)
+   */
   async getKitchenOrders(branchId: string, stationId?: string, tenantId?: string) {
     let query = `
       SELECT 
@@ -41,8 +46,8 @@ export class KitchenService {
       LEFT JOIN order_items oi ON oi.order_id = o.id
       LEFT JOIN products p ON p.id = oi.product_id
       WHERE o.branch_id = $1
-        AND o.status IN ('pending', 'confirmed', 'preparing')
-        AND oi.status NOT IN ('served', 'cancelled')
+        AND o.status IN ('pending', 'confirmed', 'preparing', 'ready')
+        AND oi.status NOT IN ('delivered', 'served', 'cancelled')
     `;
 
     const params: any[] = [branchId];
@@ -59,61 +64,88 @@ export class KitchenService {
       params.push(stationId);
     }
 
-    query += ` GROUP BY o.id, o.order_number, o.type, o.status, o.table_id, o.customer_note, o.kitchen_note, o.created_at, t.name
+    query += ` GROUP BY o.id, o.order_number, o.type, o.status, o.table_id,
+               o.customer_note, o.kitchen_note, o.created_at, t.name
+               HAVING COUNT(oi.id) FILTER (WHERE oi.status NOT IN ('delivered', 'served', 'cancelled')) > 0
                ORDER BY o.created_at ASC`;
 
     return this.dataSource.query(query, params);
   }
 
-  // Ürün durumunu güncelle (Mutfak hazır işareti)
-  // FIX: tenant doğrulaması eklendi
+  /**
+   * Mutfak ekranından ürün durumu güncelle (Mutfak → hazır işareti)
+   * order_items.status: pending|preparing|ready|served|delivered|cancelled
+   */
   async updateItemStatus(itemId: string, status: string, tenantId: string) {
     const item = await this.itemRepo.findOne({ where: { id: itemId } });
     if (!item) throw new NotFoundException('Ürün bulunamadı');
 
-    // Tenant doğrulaması: item'ın order'ı tenant'a ait mi?
+    // Tenant doğrulaması
     const order = await this.orderRepo.findOne({
       where: { id: item.order_id, tenant_id: tenantId },
       relations: ['items'],
     });
-    if (!order) throw new NotFoundException('Sipariş bulunamadı');
+    if (!order) throw new NotFoundException('Sipariş bulunamadı veya yetki yok');
 
     await this.itemRepo.update(itemId, { status });
 
-    // Tüm ürünler hazırsa sipariş durumunu "ready" yap
+    // Tüm aktif ürünler hazırsa → sipariş durumunu 'ready' yap
+    // Tüm aktif ürünler teslim/iptal → sipariş 'delivered'
     const activeItems = order.items.filter((i) => i.status !== 'cancelled');
+    
+    const effectiveStatus = (i: OrderItem) => i.id === itemId ? status : i.status;
+    
+    const allDone = activeItems.every(
+      (i) => ['delivered', 'served', 'cancelled'].includes(effectiveStatus(i)),
+    );
     const allReady = activeItems.every(
-      (i) => i.id === itemId ? status === 'ready' || status === 'served' : i.status === 'ready' || i.status === 'served'
+      (i) => ['ready', 'delivered', 'served', 'cancelled'].includes(effectiveStatus(i)),
     );
 
-    if (allReady && order.status === 'preparing') {
+    if (allDone) {
+      // Tüm ürünler teslim edildi → order 'delivered'
+      // orders.status CHECK: 'delivered' var, 'served' YOK
+      await this.orderRepo.update(order.id, { status: 'delivered' });
+      this.eventsGateway.emitToTenant(tenantId, 'order.status_changed', {
+        ...order, status: 'delivered',
+      });
+    } else if (allReady && order.status === 'preparing') {
+      // Tüm hazır, henüz teslim edilmedi → order 'ready'
       await this.orderRepo.update(order.id, { status: 'ready' });
       this.eventsGateway.emitToTenant(tenantId, 'order.status_changed', {
-        ...order,
-        status: 'ready',
+        ...order, status: 'ready',
       });
     }
 
+    // Güncel full order'ı WebSocket ile dağıt
+    const updatedOrder = await this.orderRepo.findOne({
+      where: { id: order.id },
+      relations: ['items'],
+    });
+    this.eventsGateway.emitToTenant(tenantId, 'order.updated', updatedOrder);
     this.eventsGateway.emitToTenant(tenantId, 'order.item_status_changed', {
       orderId: item.order_id,
       itemId,
       status,
     });
 
-    return { itemId, status };
+    return { itemId, status, orderId: item.order_id };
   }
 
-  // Sipariş durumunu "preparing" yap (mutfak onayladı)
-  // FIX: tenant doğrulaması eklendi
+  /**
+   * Sipariş durumunu "preparing" yap (mutfak onayladı)
+   */
   async startPreparing(orderId: string, tenantId: string) {
-    // Siparişin tenant'a ait olduğunu doğrula
     const existing = await this.orderRepo.findOne({
       where: { id: orderId, tenant_id: tenantId },
     });
     if (!existing) throw new NotFoundException('Sipariş bulunamadı');
 
     await this.orderRepo.update(orderId, { status: 'preparing' });
-    await this.itemRepo.update({ order_id: orderId, status: 'pending' }, { status: 'preparing' });
+    await this.itemRepo.update(
+      { order_id: orderId, status: 'pending' },
+      { status: 'preparing' },
+    );
 
     const order = await this.orderRepo.findOne({
       where: { id: orderId },

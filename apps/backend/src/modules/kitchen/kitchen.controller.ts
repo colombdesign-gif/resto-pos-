@@ -14,9 +14,10 @@ export class KitchenController {
   @Get('orders')
   getOrders(
     @Query('branchId') branchId: string,
-    @Query('stationId') stationId?: string,
+    @Query('stationId') stationId: string,
+    @TenantId() tenantId: string,   // ← multi-tenant güvenlik: her tenant yalnızca kendi siparişlerini görür
   ) {
-    return this.svc.getKitchenOrders(branchId, stationId);
+    return this.svc.getKitchenOrders(branchId, stationId, tenantId);
   }
 
   @Patch('items/:id/status')
