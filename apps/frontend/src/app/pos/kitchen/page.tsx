@@ -350,13 +350,23 @@ export default function KitchenPage() {
                   )}
                   {allReady && (
                     <button
-                      onClick={() => {
-                        setOrders(prev => prev.filter(o => o.id !== order.id));
-                        toast.success('Sipariş ekrandan kaldırıldı');
+                      onClick={async () => {
+                        try {
+                          // Tüm ürünleri 'served' (servis edildi) yap ki KDS'den kalıcı olarak düşsün
+                          for (const item of order.items) {
+                            if (item.status !== 'cancelled') {
+                              await api.patch(`/kitchen/items/${item.id}/status`, { status: 'served' });
+                            }
+                          }
+                          setOrders(prev => prev.filter(o => o.id !== order.id));
+                          toast.success('Sipariş tamamlandı ve mutfaktan kaldırıldı');
+                        } catch (err: any) {
+                          toast.error('Hata oluştu: ' + err.message);
+                        }
                       }}
                       className="flex-1 py-2 rounded-xl bg-blue-500/20 text-blue-400 text-sm font-semibold hover:bg-blue-500/30 transition-colors border border-blue-500/30"
                     >
-                      🏁 Ekrandan Kaldır
+                      🏁 Tamamla ve Kapat
                     </button>
                   )}
                 </div>
