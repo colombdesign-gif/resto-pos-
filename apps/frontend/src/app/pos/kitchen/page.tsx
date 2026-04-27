@@ -73,7 +73,12 @@ export default function KitchenPage() {
   }, []);
 
   useEffect(() => {
-    if (branchId) fetchOrders();
+    if (branchId) {
+      fetchOrders();
+      // WebSocket odasına katıl (Mutfak bildirimlerini almak için)
+      const socket = getSocket();
+      socket.emit('join_branch', { branchId });
+    }
 
     const socket = getSocket();
 
@@ -92,15 +97,37 @@ export default function KitchenPage() {
     });
 
     socket.on('order.status_changed', (order: any) => {
-      if (['closed', 'cancelled'].includes(order.status)) {
+      // Eğer sipariş kapandıysa, iptal edildiyse veya teslim edildiyse KDS'den kaldır
+      if (['closed', 'cancelled', 'delivered', 'served'].includes(order.status)) {
         setOrders((prev) => prev.filter((o) => o.id !== order.id));
       }
+    });
+
+    socket.on('kitchen.order_updated', (order: KitchenOrder) => {
+      setOrders((prev) => {
+        // Eğer sipariş zaten listedeyse güncelle, değilse ve uygun durumdaysa ekle
+        const exists = prev.find(o => o.id === order.id);
+        if (exists) {
+          // Eğer yeni durum listede olmaması gereken bir durumsa (örn: delivered) listeden çıkar
+          if (['closed', 'cancelled', 'delivered', 'served'].includes(order.status)) {
+             return prev.filter(o => o.id !== order.id);
+          }
+          return prev.map(o => o.id === order.id ? order : o);
+        } else {
+          // Sadece bekleyen/hazırlanan siparişleri listeye ekle
+          if (['pending', 'confirmed', 'preparing', 'ready'].includes(order.status)) {
+            return [order, ...prev];
+          }
+          return prev;
+        }
+      });
     });
 
     return () => {
       socket.off('kitchen.new_order');
       socket.off('kitchen.new_items');
       socket.off('order.status_changed');
+      socket.off('kitchen.order_updated');
     };
   }, [branchId, fetchOrders]);
 
@@ -322,9 +349,15 @@ export default function KitchenPage() {
                     </button>
                   )}
                   {allReady && (
-                    <div className="flex-1 py-2 rounded-xl bg-green-500/10 text-green-400 text-sm font-semibold text-center border border-green-500/20">
-                      ✅ Hazır — Servis Bekliyor
-                    </div>
+                    <button
+                      onClick={() => {
+                        setOrders(prev => prev.filter(o => o.id !== order.id));
+                        toast.success('Sipariş ekrandan kaldırıldı');
+                      }}
+                      className="flex-1 py-2 rounded-xl bg-blue-500/20 text-blue-400 text-sm font-semibold hover:bg-blue-500/30 transition-colors border border-blue-500/30"
+                    >
+                      🏁 Ekrandan Kaldır
+                    </button>
                   )}
                 </div>
               </div>

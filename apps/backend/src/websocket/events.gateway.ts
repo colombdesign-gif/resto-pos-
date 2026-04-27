@@ -91,7 +91,15 @@ export class EventsGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { branchId: string },
   ) {
+    const user = client.data.user;
     client.join(`branch:${data.branchId}`);
+    
+    // Mutfak personeli ise şubeye özel mutfak odasına katıl
+    if (user?.role === 'kitchen' || user?.role === 'admin' || user?.role === 'manager') {
+      client.join(`kitchen:${data.branchId}`);
+      this.logger.log(`${user.email} mutfak odasına katıldı: ${data.branchId}`);
+    }
+    
     return { joined: data.branchId };
   }
 

@@ -399,7 +399,7 @@ export default function OrderPage() {
                     tabItems(orderTab).map((g) => {
                       const s = STATUS_MAP[g.status] ?? STATUS_MAP['preparing'];
                       const isReady = g.status === 'ready';
-                      const isCancellable = !['cancelled', 'delivered', 'served'].includes(g.status);
+                      const isCancellable = !['cancelled'].includes(g.status);
 
                       return (
                         <div
