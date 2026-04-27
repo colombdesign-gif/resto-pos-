@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   name VARCHAR(255) NOT NULL,
   phone VARCHAR(30),
-  role VARCHAR(50) NOT NULL DEFAULT 'waiter' CHECK (role IN ('super_admin','admin','manager','waiter','kitchen','courier')),
+  role VARCHAR(50) NOT NULL DEFAULT 'waiter' CHECK (role IN ('super_admin','admin','manager','waiter','cashier','kitchen','courier')),
   is_active BOOLEAN DEFAULT TRUE,
   avatar_url TEXT,
   last_login TIMESTAMPTZ,
