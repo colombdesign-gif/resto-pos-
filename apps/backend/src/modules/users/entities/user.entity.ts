@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Tenant } from '../../tenants/entities/tenant.entity';
+import { Branch } from '../../branches/entities/branch.entity';
 
 @Entity('users')
 export class User {
@@ -20,6 +21,13 @@ export class User {
   @ManyToOne(() => Tenant)
   @JoinColumn({ name: 'tenant_id' })
   tenant: Tenant;
+
+  @Column({ nullable: true })
+  branch_id: string;
+
+  @ManyToOne(() => Branch)
+  @JoinColumn({ name: 'branch_id' })
+  branch: Branch;
 
   @Column({ unique: true })
   email: string;

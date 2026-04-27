@@ -49,10 +49,18 @@ export class AuthService {
       });
       await queryRunner.manager.save(tenant);
 
-      // Admin kullanıcı oluştur
+      // Varsayılan şube oluştur
+      const branchResult = await queryRunner.manager.query(
+        `INSERT INTO branches (tenant_id, name, is_active) VALUES ($1, $2, true) RETURNING id`,
+        [tenant.id, dto.businessName],
+      );
+      const branchId = branchResult[0].id;
+
+      // Admin kullanıcı oluştur (Şube ile bağla)
       const passwordHash = await bcrypt.hash(dto.password, 12);
       const user = queryRunner.manager.create(User, {
         tenant_id: tenant.id,
+        branch_id: branchId,
         email: dto.email,
         name: dto.name,
         phone: dto.phone,
@@ -60,12 +68,6 @@ export class AuthService {
         role: 'admin',
       });
       await queryRunner.manager.save(user);
-
-      // Varsayılan şube oluştur
-      await queryRunner.manager.query(
-        `INSERT INTO branches (tenant_id, name, is_active) VALUES ($1, $2, true)`,
-        [tenant.id, dto.businessName],
-      );
 
       await queryRunner.commitTransaction();
 
@@ -151,6 +153,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       tenant_id: user.tenant_id,
+      branch_id: user.branch_id,
     };
 
     const accessToken = this.jwtService.sign(payload, {

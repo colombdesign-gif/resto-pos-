@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
+import { useBranchStore } from '@/store/branchStore';
 import { getSocket } from '@/lib/socket';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
@@ -41,38 +42,49 @@ const STATUS_CONFIG = {
 export default function TablesPage() {
   const router = useRouter();
   const { user } = useAuthStore();
+  const { currentBranchId, branches, setBranches, setCurrentBranch } = useBranchStore();
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
 
-  const branchId = user?.tenant_id;
-
-  const fetchTables = useCallback(async () => {
-    if (!branchId) return;
+  const fetchTables = useCallback(async (bId?: string) => {
+    const targetId = bId || currentBranchId;
+    if (!targetId) return;
     try {
       setLoading(true);
-      const branches: any = await api.get('/branches');
-      const branchList = branches.data || branches;
-      if (!branchList.length) { setLoading(false); return; }
-      const firstBranch = branchList[0];
-
-      const res: any = await api.get(`/tables/branch/${firstBranch.id}?_t=${Date.now()}`);
+      const res: any = await api.get(`/tables/branch/${targetId}?_t=${Date.now()}`);
       setTables(res.data || res);
     } catch {
       setTables(DEMO_TABLES);
     } finally {
       setLoading(false);
     }
-  }, [branchId]);
+  }, [currentBranchId]);
 
   useEffect(() => {
-    fetchTables();
+    // Şubeleri yükle
+    api.get('/branches').then((res: any) => {
+      const list = res.data || res;
+      setBranches(list);
+      
+      // Eğer seçili şube yoksa varsayılanı ayarla
+      if (!currentBranchId || !list.find((b: any) => b.id === currentBranchId)) {
+        const defaultBranch = user?.branch_id || list[0]?.id;
+        if (defaultBranch) setCurrentBranch(defaultBranch);
+      }
+    });
+  }, [user?.branch_id]);
+
+  useEffect(() => {
+    if (currentBranchId) fetchTables();
+    
     const socket = getSocket();
     socket.on('table.status_changed', (updated: Table) => {
+      // Sadece şu anki şubedeki masaları güncelle
       setTables((prev) => prev.map((t) => t.id === updated.id ? { ...t, ...updated } : t));
     });
     return () => { socket.off('table.status_changed'); };
-  }, [fetchTables]);
+  }, [currentBranchId, fetchTables]);
 
   const filteredTables = filter === 'all' ? tables : tables.filter((t) => t.status === filter);
 
@@ -106,8 +118,26 @@ export default function TablesPage() {
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/50 bg-dark-800/50 backdrop-blur-sm">
         <div>
-          <h1 className="text-xl font-bold text-white">Masa Planı</h1>
-          <p className="text-sm text-slate-400">{stats.occupied} / {stats.total} masa dolu</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-white">Masa Planı</h1>
+            {branches.length > 1 && (
+              <select 
+                value={currentBranchId || ''} 
+                onChange={(e) => setCurrentBranch(e.target.value)}
+                className="ml-3 bg-slate-800 border-none text-orange-400 text-xs font-bold rounded-lg px-2 py-1 focus:ring-1 focus:ring-orange-500/50 cursor-pointer"
+              >
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
+            {branches.length === 1 && (
+              <span className="ml-3 text-xs bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-lg border border-orange-500/20">
+                {branches[0].name}
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-slate-400 mt-1">{stats.occupied} / {stats.total} masa dolu</p>
         </div>
 
         <div className="flex items-center gap-3">

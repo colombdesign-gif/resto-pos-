@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { useOrderStore } from '@/store/orderStore';
 import { useAuthStore } from '@/store/authStore';
+import { useBranchStore } from '@/store/branchStore';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import {
@@ -84,6 +85,7 @@ export default function OrderPage() {
   const router   = useRouter();
   const tableId  = params.tableId as string;
   const { user } = useAuthStore();
+  const { currentBranchId } = useBranchStore();
   const { cart, addToCart, removeFromCart, updateCartQuantity, clearCart, submitOrder, currentOrder, setCurrentOrder, addItemsToOrder } = useOrderStore();
 
   const [categories,       setCategories]       = useState<Category[]>([]);
@@ -182,7 +184,7 @@ export default function OrderPage() {
         toast.success('Ürünler siparişe eklendi!');
       } else {
         const orderData = {
-          branch_id: branchId,
+          branch_id: currentBranchId || branchId,
           table_id:  tableId !== 'takeaway' && tableId !== 'delivery' ? tableId : undefined,
           type:      tableId === 'takeaway' ? 'takeaway' : tableId === 'delivery' ? 'delivery' : 'dine_in',
           waiter_id: user?.id,
