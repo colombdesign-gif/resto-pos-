@@ -165,7 +165,7 @@ export default function TablesPage() {
             Hızlı Satış
           </button>
 
-          <button onClick={fetchTables} className="btn-secondary p-2.5">
+          <button onClick={() => fetchTables()} className="btn-secondary p-2.5">
             <RefreshCw className="w-4 h-4" />
           </button>
 
