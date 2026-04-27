@@ -103,16 +103,26 @@ export class KitchenService {
     );
 
     if (allDone) {
-      // Tüm ürünler teslim edildi → order 'delivered'
-      // orders.status CHECK: 'delivered' var, 'served' YOK
-      await this.orderRepo.update(order.id, { status: 'delivered' });
+      // Tüm ürünler bitti (teslim/iptal)
+      const nonCancelledCount = activeItems.filter(i => ['delivered', 'served'].includes(effectiveStatus(i))).length;
+      const newStatus = nonCancelledCount > 0 ? 'delivered' : 'cancelled';
+      
+      await this.orderRepo.update(order.id, { status: newStatus });
       this.eventsGateway.emitToTenant(tenantId, 'order.status_changed', {
-        ...order, status: 'delivered',
+        ...order, status: newStatus,
+      });
+      // Mutfağa bildir (KDS yenilensin)
+      this.eventsGateway.emitToKitchen(order.branch_id, 'kitchen.order_updated', {
+        ...order, status: newStatus,
       });
     } else if (allReady && order.status === 'preparing') {
-      // Tüm hazır, henüz teslim edilmedi → order 'ready'
+      // Tüm ürünler hazır, henüz teslim edilmedi → order 'ready'
       await this.orderRepo.update(order.id, { status: 'ready' });
       this.eventsGateway.emitToTenant(tenantId, 'order.status_changed', {
+        ...order, status: 'ready',
+      });
+      // Mutfağa bildir
+      this.eventsGateway.emitToKitchen(order.branch_id, 'kitchen.order_updated', {
         ...order, status: 'ready',
       });
     }

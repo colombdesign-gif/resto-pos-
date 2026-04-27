@@ -149,6 +149,8 @@ export class PaymentsService {
         relations: ['items'],
       });
       this.eventsGateway.emitToTenant(tenantId, 'order.payment_received', updatedOrder);
+      // Mutfağa bildir (Özellikle kapatılan siparişlerin KDS'den düşmesi için)
+      this.eventsGateway.emitToKitchen(order.branch_id, 'kitchen.order_updated', updatedOrder);
 
       return {
         success: true,

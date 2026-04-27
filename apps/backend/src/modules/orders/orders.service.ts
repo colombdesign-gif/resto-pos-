@@ -302,21 +302,41 @@ export class OrdersService {
     }
 
     const updates: any = { status };
-    if (status === 'closed') {
-      updates.closed_at = new Date();
-      if (order.table_id) {
+    if (status === 'closed' || status === 'cancelled') {
+      if (status === 'closed') updates.closed_at = new Date();
+      
+      // Sipariş iptalinde tüm ürünleri de iptal et
+      if (status === 'cancelled') {
         await this.dataSource.query(
-          `UPDATE tables SET status = 'available' WHERE id = $1`,
-          [order.table_id],
+          `UPDATE order_items SET status = 'cancelled' WHERE order_id = $1 AND status != 'cancelled'`,
+          [id]
         );
-        this.eventsGateway.emitToTenant(tenantId, 'table.status_changed', {
-          id: order.table_id, status: 'available',
-        });
+      }
+
+      if (order.table_id) {
+        // Kontrol: Masada başka aktif sipariş var mı?
+        const otherActiveOrders = await this.dataSource.query(
+          `SELECT id FROM orders WHERE table_id = $1 AND status NOT IN ('closed', 'cancelled') AND id != $2 LIMIT 1`,
+          [order.table_id, id],
+        );
+
+        if (otherActiveOrders.length === 0) {
+          await this.dataSource.query(
+            `UPDATE tables SET status = 'available' WHERE id = $1`,
+            [order.table_id],
+          );
+          this.eventsGateway.emitToTenant(tenantId, 'table.status_changed', {
+            id: order.table_id, status: 'available',
+          });
+        }
       }
     }
 
     await this.orderRepo.update(id, updates);
     const updated = await this.findById(id, tenantId);
+    
+    // Mutfağa bildir (KDS ekranı güncellensin)
+    this.eventsGateway.emitToKitchen(updated.branch_id, 'kitchen.order_updated', updated);
     this.eventsGateway.emitToTenant(tenantId, 'order.status_changed', updated);
     return updated;
   }
