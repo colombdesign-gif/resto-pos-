@@ -67,7 +67,13 @@ export default function UsersPage() {
     if (!form.name || !form.email) { toast.error('Ad ve e-posta zorunludur'); return; }
     if (!editing && !form.password) { toast.error('Yeni kullanıcı için şifre gereklidir'); return; }
     try {
-      const payload: any = { name: form.name, email: form.email, role: form.role, phone: form.phone, branch_id: form.branch_id || undefined };
+      const payload: any = { 
+        name: form.name, 
+        email: form.email, 
+        role: form.role, 
+        phone: form.phone, 
+        branch_id: form.branch_id && form.branch_id !== '' ? form.branch_id : null 
+      };
       if (form.password) payload.password = form.password;
       if (editing) {
         await api.patch(`/users/${editing.id}`, payload);

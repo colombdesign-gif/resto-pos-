@@ -42,6 +42,7 @@ export class UsersService {
     const user = this.userRepo.create({
       ...data,
       tenant_id: tenantId,
+      branch_id: data.branch_id === '' ? null : data.branch_id,
       password_hash: passwordHash,
     });
     const saved = await this.userRepo.save(user);
@@ -58,6 +59,10 @@ export class UsersService {
     if (data.password) {
       data.password_hash = await bcrypt.hash(data.password, 12);
       delete data.password;
+    }
+
+    if (data.branch_id === '') {
+      data.branch_id = null;
     }
 
     await this.userRepo.update(id, data);
