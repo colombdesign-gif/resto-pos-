@@ -61,16 +61,24 @@ export default function KitchenPage() {
   }, [branchId]);
 
   useEffect(() => {
-    // İlk şubeyi al
-    api.get('/branches').then((res: any) => {
-      const list = res.data || res;
-      if (list[0]) setBranchId(list[0].id);
-    }).catch(() => {
-      setBranchId('demo');
-      setOrders(DEMO_KITCHEN_ORDERS);
+    // Şubeyi ayarla: Mutfakçının şubesi varsa onu kullan
+    if (user?.branch_id) {
+      setBranchId(user.branch_id);
+    } else if (user?.role === 'admin' || user?.role === 'manager') {
+      api.get('/branches').then((res: any) => {
+        const list = res.data || res;
+        if (list[0]) setBranchId(list[0].id);
+      }).catch(() => {
+        setBranchId('demo');
+        setOrders(DEMO_KITCHEN_ORDERS);
+        setLoading(false);
+      });
+    } else {
+      // Şube atanmamış personel
       setLoading(false);
-    });
-  }, []);
+      toast.error('Görüntülenecek şube bulunamadı. Lütfen yöneticiye başvurun.');
+    }
+  }, [user?.branch_id, user?.role]);
 
   useEffect(() => {
     if (branchId) {

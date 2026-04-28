@@ -67,13 +67,17 @@ export default function TablesPage() {
       const list = res.data || res;
       setBranches(list);
       
-      // Eğer seçili şube yoksa varsayılanı ayarla
-      if (!currentBranchId || !list.find((b: any) => b.id === currentBranchId)) {
+      // Eğer admin değilse şubeyi sabitle, yoksa varsayılanı ayarla
+      const restrictedRole = user?.role !== 'admin' && user?.role !== 'manager';
+      
+      if (restrictedRole && user?.branch_id) {
+        setCurrentBranch(user.branch_id);
+      } else if (!currentBranchId || !list.find((b: any) => b.id === currentBranchId)) {
         const defaultBranch = user?.branch_id || list[0]?.id;
         if (defaultBranch) setCurrentBranch(defaultBranch);
       }
     });
-  }, [user?.branch_id]);
+  }, [user?.branch_id, user?.role]);
 
   useEffect(() => {
     if (currentBranchId) fetchTables();
@@ -120,7 +124,7 @@ export default function TablesPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-white">Masa Planı</h1>
-            {branches.length > 1 && (
+            {branches.length > 1 && (user?.role === 'admin' || user?.role === 'manager') && (
               <select 
                 value={currentBranchId || ''} 
                 onChange={(e) => setCurrentBranch(e.target.value)}
@@ -131,9 +135,9 @@ export default function TablesPage() {
                 ))}
               </select>
             )}
-            {branches.length === 1 && (
+            {(branches.length === 1 || (user?.role !== 'admin' && user?.role !== 'manager')) && currentBranchId && (
               <span className="ml-3 text-xs bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-lg border border-orange-500/20">
-                {branches[0].name}
+                {branches.find(b => b.id === currentBranchId)?.name || 'Şube'}
               </span>
             )}
           </div>

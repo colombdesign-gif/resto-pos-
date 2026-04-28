@@ -15,16 +15,23 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(false);
   const [startDate, setStartDate] = useState(dayjs().subtract(7, 'day').format('YYYY-MM-DD'));
   const [endDate, setEndDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [branches, setBranches] = useState<any[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState('');
+
+  useEffect(() => {
+    api.get('/branches').then((res: any) => setBranches(res.data || res)).catch(() => {});
+  }, []);
 
   const fetchReport = async () => {
     setLoading(true);
     try {
+      const q = `startDate=${startDate}&endDate=${endDate}&branchId=${selectedBranch}`;
       const endpoint = {
-        'Satış': `/reports/sales?startDate=${startDate}&endDate=${endDate}&groupBy=day`,
-        'Ürünler': `/reports/products?startDate=${startDate}&endDate=${endDate}`,
-        'Garsonlar': `/reports/waiters?startDate=${startDate}&endDate=${endDate}`,
-        'Şubeler': `/reports/branches?startDate=${startDate}&endDate=${endDate}`,
-        'Saatlik': `/reports/hourly`,
+        'Satış': `/reports/sales?${q}&groupBy=day`,
+        'Ürünler': `/reports/products?${q}`,
+        'Garsonlar': `/reports/waiters?${q}`,
+        'Şubeler': `/reports/branches?startDate=${startDate}&endDate=${endDate}`, // Şubeler sekmesinde şube filtresi olmaz (tümü karşılaştırılır)
+        'Saatlik': `/reports/hourly?branchId=${selectedBranch}`,
       }[activeTab];
 
       const res: any = await api.get(endpoint!);
@@ -36,7 +43,7 @@ export default function ReportsPage() {
     }
   };
 
-  useEffect(() => { fetchReport(); }, [activeTab, startDate, endDate]);
+  useEffect(() => { fetchReport(); }, [activeTab, startDate, endDate, selectedBranch]);
 
   return (
     <div className="p-6">
@@ -49,9 +56,26 @@ export default function ReportsPage() {
 
       {/* Filtreler */}
       <div className="flex flex-wrap gap-3 mb-5">
-        <input type="date" className="input w-auto py-2" value={startDate} onChange={e => setStartDate(e.target.value)} />
-        <span className="text-slate-400 self-center">—</span>
-        <input type="date" className="input w-auto py-2" value={endDate} onChange={e => setEndDate(e.target.value)} />
+        <div className="flex items-center gap-2 bg-slate-800 rounded-xl p-1 px-3 border border-slate-700/50">
+          <Calendar className="w-4 h-4 text-slate-400" />
+          <input type="date" className="bg-transparent border-none text-sm text-white focus:ring-0 py-1.5" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          <span className="text-slate-600">—</span>
+          <input type="date" className="bg-transparent border-none text-sm text-white focus:ring-0 py-1.5" value={endDate} onChange={e => setEndDate(e.target.value)} />
+        </div>
+
+        <div className="flex items-center gap-2 bg-slate-800 rounded-xl p-1 px-3 border border-slate-700/50">
+          <Package className="w-4 h-4 text-slate-400" />
+          <select 
+            className="bg-transparent border-none text-sm text-white focus:ring-0 py-1.5 cursor-pointer"
+            value={selectedBranch}
+            onChange={(e) => setSelectedBranch(e.target.value)}
+          >
+            <option value="">Tüm Şubeler</option>
+            {branches.map(b => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Tab bar */}

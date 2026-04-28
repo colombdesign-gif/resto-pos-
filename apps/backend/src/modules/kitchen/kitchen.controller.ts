@@ -2,7 +2,7 @@ import { Controller, Get, Patch, Post, Body, Param, Query, UseGuards } from '@ne
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { KitchenService } from './kitchen.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { TenantId } from '../../common/decorators';
+import { TenantId, CurrentUser } from '../../common/decorators';
 
 @ApiTags('Kitchen')
 @ApiBearerAuth()
@@ -13,10 +13,15 @@ export class KitchenController {
 
   @Get('orders')
   getOrders(
-    @Query('branchId') branchId: string,
+    @Query('branchId') qBranchId: string,
     @Query('stationId') stationId: string,
-    @TenantId() tenantId: string,   // ← multi-tenant güvenlik: her tenant yalnızca kendi siparişlerini görür
+    @TenantId() tenantId: string,
+    @CurrentUser() user: any,
   ) {
+    // Güvenlik: Eğer kullanıcı admin/manager değilse, sadece kendi şubesini görebilir
+    const isRestricted = user.role !== 'admin' && user.role !== 'manager';
+    const branchId = isRestricted ? user.branch_id : (qBranchId || user.branch_id);
+    
     return this.svc.getKitchenOrders(branchId, stationId, tenantId);
   }
 

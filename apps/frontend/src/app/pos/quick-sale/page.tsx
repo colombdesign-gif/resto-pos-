@@ -36,10 +36,15 @@ export default function QuickSalePage() {
   const change = paymentMethod === 'cash' ? Math.max(0, parseFloat(cashGiven || '0') - cartTotal) : 0;
 
   useEffect(() => {
-    api.get('/branches').then((res: any) => {
-      const list = res.data || res;
-      if (list.length > 0) setBranchId(list[0].id);
-    }).catch(() => {});
+    // Şubeyi ayarla: Kullanıcının şubesi varsa onu kullan, yoksa ilkini seç
+    if (user?.branch_id) {
+      setBranchId(user.branch_id);
+    } else {
+      api.get('/branches').then((res: any) => {
+        const list = res.data || res;
+        if (list.length > 0) setBranchId(list[0].id);
+      }).catch(() => {});
+    }
 
     Promise.all([api.get('/menu/categories'), api.get('/menu/products')])
       .then(([c, p]: any) => {
