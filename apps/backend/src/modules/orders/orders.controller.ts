@@ -18,12 +18,12 @@ export class OrdersController {
   @Get()
   findAll(
     @TenantId() tid: string,
+    @CurrentUser() user: any,
     @Query('branchId') qBranchId: string,
     @Query('status') status?: string,
     @Query('type') type?: string,
     @Query('date') date?: string,
     @Query('tableId') tableId?: string,
-    @CurrentUser() user: any,
   ) {
     const isRestricted = user.role !== 'admin' && user.role !== 'manager';
     let branchId = qBranchId;
