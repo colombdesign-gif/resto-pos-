@@ -47,6 +47,7 @@ export default function KitchenPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'preparing' | 'ready'>('all');
   const [branchId, setBranchId] = useState<string>('');
+  const [branches, setBranches] = useState<any[]>([]);
 
   const fetchOrders = useCallback(async () => {
     if (!branchId) return;
@@ -61,22 +62,26 @@ export default function KitchenPage() {
   }, [branchId]);
 
   useEffect(() => {
-    // Şubeyi ayarla: Mutfakçının şubesi varsa onu kullan
-    if (user?.branch_id) {
-      setBranchId(user.branch_id);
-    } else if (user?.role === 'admin' || user?.role === 'manager') {
+    // Şubeleri yükle (Eğer admin/manager ise)
+    if (user?.role === 'admin' || user?.role === 'manager') {
       api.get('/branches').then((res: any) => {
         const list = res.data || res;
-        if (list[0]) setBranchId(list[0].id);
+        setBranches(list);
+        if (user?.branch_id) {
+          setBranchId(user.branch_id);
+        } else if (list[0]) {
+          setBranchId(list[0].id);
+        }
       }).catch(() => {
         setBranchId('demo');
         setOrders(DEMO_KITCHEN_ORDERS);
         setLoading(false);
       });
+    } else if (user?.branch_id) {
+      setBranchId(user.branch_id);
     } else {
-      // Şube atanmamış personel
       setLoading(false);
-      toast.error('Görüntülenecek şube bulunamadı. Lütfen yöneticiye başvurun.');
+      toast.error('Görüntülenecek şube bulunamadı.');
     }
   }, [user?.branch_id, user?.role]);
 
@@ -217,6 +222,24 @@ export default function KitchenPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Adminler için Şube Seçimi */}
+          {(user?.role === 'admin' || user?.role === 'manager') && branches.length > 1 && (
+            <div className="flex items-center gap-2 bg-slate-800 rounded-xl p-1 px-3 border border-slate-700/50">
+              <Filter className="w-4 h-4 text-slate-400" />
+              <select
+                className="bg-transparent border-none text-sm text-white focus:ring-0 py-1.5 cursor-pointer max-w-[150px]"
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id} className="bg-slate-800">
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Filtre */}
           <div className="flex items-center gap-1 bg-slate-800 rounded-xl p-1">
             {[
