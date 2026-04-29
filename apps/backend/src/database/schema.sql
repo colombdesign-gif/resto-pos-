@@ -20,6 +20,26 @@ CREATE TABLE IF NOT EXISTS tenants (
 );
 
 -- ============================================================
+-- BRANCHES (Şubeler)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS branches (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  address TEXT,
+  city VARCHAR(100),
+  phone VARCHAR(50),
+  email VARCHAR(255),
+  tax_office VARCHAR(100),
+  tax_number VARCHAR(30),
+  settings JSONB DEFAULT '{}',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_branches_tenant ON branches(tenant_id);
+
+-- ============================================================
 -- USERS
 -- ============================================================
 CREATE TABLE IF NOT EXISTS users (
@@ -73,26 +93,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_audit_tenant ON audit_logs(tenant_id, created_at DESC);
-
--- ============================================================
--- BRANCHES (Şubeler)
--- ============================================================
-CREATE TABLE IF NOT EXISTS branches (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  name VARCHAR(255) NOT NULL,
-  address TEXT,
-  city VARCHAR(100),
-  phone VARCHAR(50),
-  email VARCHAR(255),
-  tax_office VARCHAR(100),
-  tax_number VARCHAR(30),
-  settings JSONB DEFAULT '{}',
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_branches_tenant ON branches(tenant_id);
 
 -- ============================================================
 -- FLOOR PLANS (Kat Planları)
