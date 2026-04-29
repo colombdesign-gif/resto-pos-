@@ -20,9 +20,16 @@ export class KitchenController {
   ) {
     // Güvenlik: Eğer kullanıcı admin/manager değilse, sadece kendi şubesini görebilir
     const isRestricted = user.role !== 'admin' && user.role !== 'manager';
-    const branchId = isRestricted ? user.branch_id : (qBranchId || user.branch_id);
-    
-    return this.svc.getKitchenOrders(branchId, stationId, tenantId);
+    let branchId = qBranchId;
+
+    if (isRestricted) {
+      branchId = user.branch_id;
+    } else if (!branchId && branchId !== '') {
+      // Admin/Manager ama şube seçmemişse kendi şubesine bak (varsa)
+      branchId = user.branch_id;
+    }
+
+    return this.svc.getKitchenOrders(branchId || null, stationId, tenantId);
   }
 
   @Patch('items/:id/status')

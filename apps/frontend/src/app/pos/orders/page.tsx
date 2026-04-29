@@ -29,16 +29,44 @@ export default function OrdersPage() {
   const [selected, setSelected] = useState<Order | null>(null);
   const [payOrder, setPayOrder] = useState<Order | null>(null);
   const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [branches, setBranches] = useState<any[]>([]);
+  const [branchId, setBranchId] = useState<string>('');
+
+  useEffect(() => {
+    // Şubeleri yükle (Eğer admin/manager ise)
+    if (user?.role === 'admin' || user?.role === 'manager') {
+      api.get('/branches').then((res: any) => {
+        const list = res.data || res;
+        setBranches(list);
+        if (user?.branch_id) setBranchId(user.branch_id);
+        else if (list[0]) setBranchId(list[0].id);
+      }).catch((err: any) => {
+        toast.error('Şubeler yüklenemedi: ' + err.message);
+      });
+    } else if (user?.branch_id) {
+      setBranchId(user.branch_id);
+    }
+  }, [user?.branch_id, user?.role]);
 
   const fetch = async () => {
+    if (!branchId && user?.role !== 'admin' && user?.role !== 'manager') return;
     setLoading(true);
     try {
-      const res: any = await api.get('/orders', { params: { date, status: filter === 'all' ? undefined : filter } });
+      const res: any = await api.get('/orders', { 
+        params: { 
+          date, 
+          status: filter === 'all' ? undefined : filter,
+          branchId: branchId || undefined
+        } 
+      });
       setOrders(res.data || res);
-    } catch { setOrders(DEMO_ORDERS); } finally { setLoading(false); }
+    } catch (err: any) { 
+      toast.error('Siparişler yüklenemedi: ' + err.message);
+      setOrders([]); 
+    } finally { setLoading(false); }
   };
 
-  useEffect(() => { fetch(); }, [filter, date]);
+  useEffect(() => { fetch(); }, [filter, date, branchId]);
 
   const handleStatusUpdate = async (orderId: string, status: string) => {
     try {
@@ -62,6 +90,16 @@ export default function OrdersPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {(user?.role === 'admin' || user?.role === 'manager') && branches.length > 1 && (
+            <select 
+              className="input py-1.5 text-sm w-auto cursor-pointer" 
+              value={branchId} 
+              onChange={e => setBranchId(e.target.value)}
+            >
+              <option value="">Tüm Şubeler</option>
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          )}
           <input type="date" className="input py-1.5 text-sm w-auto" value={date} onChange={e => setDate(e.target.value)} />
           <button onClick={fetch} className="btn-secondary p-2.5"><RefreshCw className="w-4 h-4" /></button>
         </div>

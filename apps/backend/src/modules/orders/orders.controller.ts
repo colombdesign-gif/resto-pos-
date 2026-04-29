@@ -18,13 +18,24 @@ export class OrdersController {
   @Get()
   findAll(
     @TenantId() tid: string,
-    @Query('branchId') branchId?: string,
+    @Query('branchId') qBranchId: string,
     @Query('status') status?: string,
     @Query('type') type?: string,
     @Query('date') date?: string,
     @Query('tableId') tableId?: string,
+    @CurrentUser() user: any,
   ) {
-    return this.svc.findAll(tid, { branchId, status, type, date, tableId });
+    const isRestricted = user.role !== 'admin' && user.role !== 'manager';
+    let branchId = qBranchId;
+
+    if (isRestricted) {
+      branchId = user.branch_id;
+    } else if (!branchId && branchId !== '') {
+      // Admin/Manager ama şube seçmemişse kendi şubesine bak (varsa)
+      branchId = user.branch_id;
+    }
+    
+    return this.svc.findAll(tid, { branchId: branchId || undefined, status, type, date, tableId });
   }
 
   @Get('table/:tableId/active')

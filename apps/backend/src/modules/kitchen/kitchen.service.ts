@@ -45,7 +45,7 @@ export class KitchenService {
       LEFT JOIN tables t ON t.id = o.table_id
       LEFT JOIN order_items oi ON oi.order_id = o.id
       LEFT JOIN products p ON p.id = oi.product_id
-      WHERE o.branch_id = $1
+      WHERE ($1::uuid IS NULL OR o.branch_id = $1)
         AND o.status IN ('pending', 'confirmed', 'preparing', 'ready')
         AND oi.status NOT IN ('delivered', 'served', 'cancelled')
     `;

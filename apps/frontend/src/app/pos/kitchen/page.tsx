@@ -54,8 +54,9 @@ export default function KitchenPage() {
     try {
       const res: any = await api.get('/kitchen/orders', { params: { branchId } });
       setOrders(res.data || res);
-    } catch {
-      setOrders(DEMO_KITCHEN_ORDERS);
+    } catch (err: any) {
+      toast.error('Siparişler yüklenemedi: ' + err.message);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -72,9 +73,8 @@ export default function KitchenPage() {
         } else if (list[0]) {
           setBranchId(list[0].id);
         }
-      }).catch(() => {
-        setBranchId('demo');
-        setOrders(DEMO_KITCHEN_ORDERS);
+      }).catch((err: any) => {
+        toast.error('Şubeler yüklenemedi: ' + err.message);
         setLoading(false);
       });
     } else if (user?.branch_id) {
